@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tdlas_mapping</name>
+  <version>1.0.0</version>
+  <description>.</description>
+  <maintainer email="o@uma.es">a</maintainer>
+
+
+  <!-- One license tag required, multiple allowed, one license per tag -->
+  <license>LGPLv3</license>
+
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <build_depend>rclcpp</build_depend>
+  <build_depend>rclcpp_action</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>ament_imgui</build_depend>
+
+
+  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+  
+</package>
