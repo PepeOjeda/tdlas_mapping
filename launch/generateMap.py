@@ -23,34 +23,8 @@ def generate_launch_description():
             parameters=[
                 {"rayMarchResolution": 0.4},
                 {"lambda": 0.0},
-                {"filepath": os.path.join(my_dir, "data", "measurement_log1_postProcessed")},
-                {"mask_filepath": "/mnt/HDD/colcon_ws/mask.png"},
+                {"filepath": os.path.join(my_dir, "data", "measurement_log1")},
             ],
             on_exit=Shutdown()
-        ),
-
-        Node(
-            package='nav2_map_server',
-            executable='map_server',
-            name='map_server',
-            output='screen',
-            parameters=[
-                {'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
-                {'frame_id' : 'map'}
-                ],
-            ),
-        # LIFECYCLE MANAGER
-        Node(
-            package='nav2_lifecycle_manager',
-            executable='lifecycle_manager',
-            name='lifecycle_manager_navigation',
-            output='screen',
-            parameters=[{'use_sim_time': False},
-                        {'autostart': True},
-                        {'node_names': [
-                            'map_server',
-                            ]
-                        }
-            ]
         ),
     ])

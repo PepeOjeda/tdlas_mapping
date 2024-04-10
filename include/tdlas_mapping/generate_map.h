@@ -14,15 +14,12 @@ public:
     void readFile();
     void solve();
     void getEnvironment();
-    nav_msgs::msg::OccupancyGrid::SharedPtr m_map_msg{nullptr};
     void writeHeatmap();
 private:
     std::string m_input_filepath;
-    std::string m_mask_filepath;
     int m_num_cells;
     int m_num_measurements;
     float m_lambda;
-    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr m_mapSub;
 
     Eigen::VectorXf m_concentration; //(num_cells);
     Eigen::VectorXf m_measurements; //(num_measurements);
@@ -41,11 +38,6 @@ private:
 	    return index.x + index.y*num_cells_x;
     }
     
-    void mapCallback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
-    {
-        m_map_msg = msg;
-    }
-
 };
 
 

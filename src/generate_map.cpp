@@ -4,8 +4,6 @@
 #include <tdlas_mapping/common.h>
 #include <olfaction_msgs/msg/tdlas.hpp>
 #include <tf2/LinearMath/Transform.h>
-#include <eigen3/Eigen/SVD>
-#include <eigen3-nnls/src/nnls.h>
 
 #include <opencv4/opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -14,12 +12,13 @@
 #include <fmt/core.h>
 #include <filesystem>
 
+#include <lsqcpp/lsqcpp.hpp>
+
 #define RAYS_IMAGE 1
 
 #if RAYS_IMAGE
 static cv::Mat rays_image;
 #endif
-static cv::Mat mask;
 
 using PoseStamped = geometry_msgs::msg::PoseStamped;
 using TDLAS=olfaction_msgs::msg::TDLAS;
@@ -36,13 +35,9 @@ static TDLAS jsonToTDLAS(const nlohmann::json& json)
 
 MapGenerator::MapGenerator() : Node("MapGenerator")
 {
-    m_mapSub = create_subscription<nav_msgs::msg::OccupancyGrid>("map", rclcpp::QoS(1).reliable().transient_local(), 
-        std::bind(&MapGenerator::mapCallback, this, std::placeholders::_1));
-
     m_rayMarchResolution = declare_parameter<float>("rayMarchResolution", 0.05f);
     m_lambda = declare_parameter<float>("lambda", 0.01);
-    m_input_filepath = declare_parameter<std::string>("filepath", "/mnt/HDD/colcon_ws/measurement_log");
-    m_mask_filepath = declare_parameter<std::string>("mask_filepath", "/mnt/HDD/colcon_ws/mask.png");
+    m_input_filepath = declare_parameter<std::string>("filepath", "measurement_log");
 
 }
 
@@ -56,14 +51,6 @@ void MapGenerator::readFile()
         raise(SIGTRAP);
     }
     
-    if(std::filesystem::exists(m_mask_filepath))
-        mask=cv::imread(m_mask_filepath, cv::IMREAD_GRAYSCALE);
-    else
-    {
-        RCLCPP_ERROR(get_logger(), "Could not open mask file: %s  Using an all-ones mask", m_mask_filepath.c_str());
-        mask.create(cv::Size(m_occupancy_map[0].size(), m_occupancy_map.size()), CV_8UC1);
-        mask.setTo(255);
-    }
 
     //Count the number of entries and size the matrices accordingly
     int numberOfMeasurements=0;
@@ -90,16 +77,16 @@ void MapGenerator::readFile()
     while(std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform rhodon = poseToTransform( nav2MQTT::from_json(json["rhodon"]).pose );
-        tf2::Transform giraff = poseToTransform( nav2MQTT::from_json(json["giraff"]).pose );
+        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensor"]).pose );
+        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflector"]).pose );
         TDLAS tdlas = jsonToTDLAS(json["reading"]);
 
         m_measurements[measurementIndex] = tdlas.average_ppmxm;
 
         //fill in the cell raytracing thing
-        glm::vec2 rayOrigin = glm::fromTF( rhodon.getOrigin() );
-        glm::vec2 rayDirection = glm::fromTF( tf2::quatRotate(rhodon.getRotation(), {0,1,0}) ); 
-        glm::vec2 reflectorPosition = glm::fromTF( giraff.getOrigin() );
+        glm::vec2 rayOrigin = glm::fromTF( sensor.getOrigin() );
+        glm::vec2 rayDirection = glm::fromTF( tf2::quatRotate(sensor.getRotation(), {0,1,0}) ); 
+        glm::vec2 reflectorPosition = glm::fromTF( reflector.getOrigin() );
 
         runDDA(rayOrigin, rayDirection, reflectorPosition, measurementIndex, tdlas.average_ppmxm);
         measurementIndex++;
@@ -119,57 +106,116 @@ void MapGenerator::readFile()
 #endif
 }
 
+struct ObjectiveFunction
+{
+    static constexpr bool ComputesJacobian = false;
+    static inline Eigen::MatrixXf lengthInCell;
+    static inline Eigen::VectorXf measurements;
+    static inline float lambda;
+
+    template<typename Scalar, int Inputs, int Outputs>
+    void operator()(const Eigen::Matrix<Scalar, Inputs, 1> &xval,
+                    Eigen::Matrix<Scalar, Outputs, 1> &fval) const
+    {
+        fval.resize(1);
+
+        auto predictedReading = lengthInCell * xval;
+        fval(0) = (measurements-predictedReading).norm();
+        for(Eigen::Index i = 0; i<predictedReading.rows(); i++)
+        {
+            fval(0) += predictedReading(i,0)*predictedReading(i,0) * lambda;
+        }
+    }
+};
+
 void MapGenerator::solve()
 {
-    Eigen::NNLS<Eigen::MatrixXf> solver(m_lengthRayInCell, 1000, 0.000005);
-    solver.solve(m_measurements);
-    m_concentration = solver.x();
+    ObjectiveFunction::lengthInCell = m_lengthRayInCell;
+    ObjectiveFunction::lambda = m_lambda;
+    ObjectiveFunction::measurements = m_measurements;
+    
+    lsqcpp::GaussNewtonX<float, ObjectiveFunction, lsqcpp::ArmijoBacktracking> optimizer;
+
+    // Set number of iterations as stop criterion.
+    // Set it to 0 or negative for infinite iterations (default is 0).
+    optimizer.setMaximumIterations(100);
+
+    // Set the minimum length of the gradient.
+    // The optimizer stops minimizing if the gradient length falls below this
+    // value.
+    // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
+    optimizer.setMinimumGradientLength(1e-6);
+
+    // Set the minimum length of the step.
+    // The optimizer stops minimizing if the step length falls below this
+    // value.
+    // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
+    optimizer.setMinimumStepLength(1e-6);
+
+    // Set the minimum least squares error.
+    // The optimizer stops minimizing if the error falls below this
+    // value.
+    // Set it to 0 or negative to disable this stop criterion (default is 0).
+    optimizer.setMinimumError(0);
+
+    // Set the parameters of the step refiner (Armijo Backtracking).
+    optimizer.setRefinementParameters({0.8, 1e-4, 1e-10, 1.0, 0});
+
+    // Turn verbosity on, so the optimizer prints status updates after each
+    // iteration.
+    optimizer.setVerbosity(4);
+
+    // Set initial guess.
+    Eigen::VectorXf initialGuess(m_num_cells);
+    for(Eigen::Index i = 0; i< initialGuess.size(); i++)
+        initialGuess(i) = 0.0;
+
+    // Start the optimization.
+    auto result = optimizer.minimize(initialGuess);
 }
 
 
 
 void MapGenerator::getEnvironment()
 {    
-    if(m_rayMarchResolution < m_map_msg->info.resolution)
+    // We are going to assume an empty map that's just the bounds of the measurements
+    // for an example of how to actually do this for real, see the robot2023 branch
+    std::ifstream file(m_input_filepath);
+    if(!file.is_open())
     {
-        RCLCPP_WARN(get_logger(), "Chosen raymarch resolution (%fm) is smaller than the resolution of the occupancy map (%fm). This can cause problems, so raymarch will happen at a %fm resolution",
-            m_rayMarchResolution, m_map_msg->info.resolution, m_map_msg->info.resolution);
-        m_rayMarchResolution = m_map_msg->info.resolution;
+        RCLCPP_ERROR(get_logger(), "Could not open file %s", m_input_filepath.c_str());
+        raise(SIGTRAP);
     }
 
-    double resoultionRatio = m_map_msg->info.resolution / m_rayMarchResolution;
-    int num_cells_x = m_map_msg->info.width * resoultionRatio;
-    int num_cells_y = m_map_msg->info.height * resoultionRatio;
+    uint num_cells_x, num_cells_y;
+    //find environment dimensions (Bounding box)
+    glm::vec2 min{FLT_MAX, FLT_MAX}, max{-FLT_MAX, -FLT_MAX};
+    std::string line;
+    while(std::getline(file, line))
+    {
+        auto json = nlohmann::json::parse(line);
+        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensor"]).pose );
+        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflector"]).pose );
+
+        min.x = std::min({(double)min.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
+        min.y = std::min({(double)min.y, sensor.getOrigin().y(), reflector.getOrigin().y()});
+
+        max.x = std::max({(double)max.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
+        max.y = std::max({(double)max.y, sensor.getOrigin().y(), reflector.getOrigin().y()});       
+    }
+
+    RCLCPP_INFO(get_logger(), "Environment bounds: (%.2f, %.2f) --- (%.2f, %.2f)", min.x, min.y, max.x, max.y);
+    num_cells_x = (max.x-min.x) / m_rayMarchResolution;
+    num_cells_y = (max.y-min.y) / m_rayMarchResolution;
+
+    file.close();
+    
     m_num_cells = num_cells_x * num_cells_y;
     
-    m_mapOrigin.x = m_map_msg->info.origin.position.x;
-    m_mapOrigin.y = m_map_msg->info.origin.position.y;
+    m_mapOrigin.x = min.x;
+    m_mapOrigin.y = min.y;
     
-    m_occupancy_map.resize(num_cells_x, std::vector<bool>(num_cells_y ) );
-
-
-    auto cellFree = [this, resoultionRatio](int argI, int argJ)
-    {
-        int width = m_map_msg->info.width;
-        bool cellIsFree = true;
-        for(int i = argI/resoultionRatio; i<(argI+1)/resoultionRatio; i++)
-        {
-            for(int j = argJ/resoultionRatio; j<(argJ+1)/resoultionRatio; j++)
-            {
-                int value = m_map_msg->data[i + j*width];
-                cellIsFree = cellIsFree &&  value == 0;
-            }
-        }
-        return cellIsFree;
-    };
-
-    for(int i=0; i<m_occupancy_map.size(); i++)
-    {
-        for(int j=0; j<m_occupancy_map[0].size(); j++)
-        {
-            m_occupancy_map[i][j] = cellFree(i,j);
-        }
-    }
+    m_occupancy_map.resize(num_cells_x, std::vector<bool>(num_cells_y, true) );
 }
 
 
@@ -191,9 +237,6 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
     for(const auto& [index, length] : rayData.lengthInCell)
     {
         uint columnIndex = index2Dto1D(index);
-        if(mask.at<uint8_t>(index.x, index.y) == 0)
-            continue;
-
         m_lengthRayInCell(rowIndex,columnIndex) = length; 
         
 
@@ -251,14 +294,11 @@ void MapGenerator::writeHeatmap()
     }
 
     std::filesystem::path inputPath(m_input_filepath);
-    std::string outputPath = fmt::format("results/mask_{}_{}m_lambda-{}.png", inputPath.filename().c_str(), m_rayMarchResolution, m_lambda);
+    std::string outputPath = fmt::format("concentration_map.png");
     cv::imwrite(outputPath, img_color);
 
 
-    std::ofstream scale ("results/scale.csv", std::ios::app);
-    scale<<outputPath<<"; "<<max<<"\n";
-    scale.close();
-
+    RCLCPP_INFO(get_logger(), "MAX CONCENTRATION VALUE: %.3f ppm", max);
     RCLCPP_INFO(get_logger(), "MAP WAS GENERATED AT PATH: %s", outputPath.c_str());
 }
 
@@ -269,13 +309,6 @@ int main(int argc, char** argv)
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MapGenerator>();
     
-    rclcpp::Rate rate(10);
-    while(rclcpp::ok() && node->m_map_msg.get() == nullptr)
-    {
-        rclcpp::spin_some(node);
-        rate.sleep();
-    }
-
     node->getEnvironment();
     node->readFile();
     node->solve();

@@ -10,22 +10,24 @@ public:
         reset(0);
     }
 
-    void reset(float error){
+    void reset(float error)
+    {
         setPrevious(error);
         integralAccumulator = 0;
     }
 
-    float DoUpdate(float error){
-        float timestep = clock->now().seconds()-previousTimestamp;
-        
+    float DoUpdate(float error)
+    {
+        float timestep = clock->now().seconds() - previousTimestamp;
+
         float pTerm = error * kP;
 
-        float dTerm = timestep==0? 0 : kD*(error - previousError)/timestep;
+        float dTerm = timestep == 0 ? 0 : kD * (error - previousError) / timestep;
         setPrevious(error);
 
-        integralAccumulator = std::clamp(integralAccumulator + error*timestep, -integralSaturation, integralSaturation);
+        integralAccumulator = integralAccumulator + error * timestep;
         float iTerm = integralAccumulator * kI;
-        
+
         return std::clamp(pTerm + dTerm + iTerm, -maximumOutput, maximumOutput);
     }
 
@@ -33,17 +35,17 @@ public:
     float kD;
     float kI;
     float maximumOutput = 1;
+
 private:
     rclcpp::Clock::SharedPtr clock;
-    float integralSaturation;
 
     float previousError;
     float previousTimestamp;
     float integralAccumulator;
 
-    void setPrevious(float val){
+    void setPrevious(float val)
+    {
         previousError = val;
         previousTimestamp = clock->now().seconds();
     }
-
 };

@@ -10,7 +10,8 @@
                 "/opt/ros/humble/include/**",
                 "/mnt/HDD/colcon_ws/src/tdlas_mapping/include",
                 "/mnt/HDD/colcon_ws/install/olfaction_msgs/include/olfaction_msgs",
-                "${workspaceFolder}/include/DDA/include"
+                "${workspaceFolder}/include/DDA/include",
+                "${workspaceFolder}/third_party/least-squares-cpp/include",
             ],
             "name": "ROS",
             "intelliSenseMode": "gcc-x64",
