@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.5)
 project(tdlas_mapping)
 
 ##################
-set(CMAKE_BUILD_TYPE "None") 
-set(CMAKE_CXX_FLAGS "-std=c++17 -g -O3 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_BUILD_TYPE "Release") 
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -O3 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG "-std=c++17 -g -O0 ${CMAKE_CXX_FLAGS}")
 
 
 
@@ -38,10 +39,14 @@ ${AMENT_DEPS}
 
 #Generate map
 find_package(OpenCV REQUIRED)
+find_package(OpenMP REQUIRED)
 find_package(fmt REQUIRED)
 add_executable(generate_map src/generate_map.cpp)
 target_include_directories(generate_map PRIVATE include/DDA/include third_party/least-squares-cpp/include)
-target_link_libraries(generate_map ${OpenCV_LIBS} fmt)
+target_link_libraries(generate_map 
+    ${OpenCV_LIBS} 
+    fmt 
+    OpenMP::OpenMP_CXX)
 ament_target_dependencies(generate_map
 ${AMENT_DEPS}
 ) 

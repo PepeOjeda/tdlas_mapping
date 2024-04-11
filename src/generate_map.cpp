@@ -118,12 +118,16 @@ struct ObjectiveFunction
                     Eigen::Matrix<Scalar, Outputs, 1> &fval) const
     {
         fval.resize(1);
-
-        auto predictedReading = lengthInCell * xval;
+        Eigen::VectorXf predictedReading = lengthInCell * xval;
         fval(0) = (measurements-predictedReading).norm();
-        for(Eigen::Index i = 0; i<predictedReading.rows(); i++)
+
+        Eigen::Index rows = predictedReading.rows();
+        for(Eigen::Index i = 0; i<rows; i++)
         {
-            fval(0) += predictedReading(i,0)*predictedReading(i,0) * lambda;
+            auto val = predictedReading(i);
+            fval(0) += val * val * lambda;
+            if(val < 0)
+                fval(0) += 10000 * std::abs(val);
         }
     }
 };
@@ -159,11 +163,12 @@ void MapGenerator::solve()
     optimizer.setMinimumError(0);
 
     // Set the parameters of the step refiner (Armijo Backtracking).
-    optimizer.setRefinementParameters({0.8, 1e-4, 1e-10, 1.0, 0});
+    optimizer.setRefinementParameters({0.8, 1e-4, 1e-7, 10.0, 0});
 
     // Turn verbosity on, so the optimizer prints status updates after each
     // iteration.
-    optimizer.setVerbosity(4);
+    optimizer.setVerbosity(1);
+    optimizer.setOutputStream(std::cerr);
 
     // Set initial guess.
     Eigen::VectorXf initialGuess(m_num_cells);
@@ -172,6 +177,9 @@ void MapGenerator::solve()
 
     // Start the optimization.
     auto result = optimizer.minimize(initialGuess);
+    m_concentration = result.xval;
+    RCLCPP_INFO(get_logger(), "Iterations: %ld", result.iterations); 
+    RCLCPP_INFO(get_logger(), "Residual: %f", result.fval.norm()); 
 }
 
 
@@ -261,7 +269,6 @@ void MapGenerator::writeHeatmap()
         if(m_concentration[i]>max)
             max = m_concentration[i];
 
-    RCLCPP_INFO(get_logger(), "MAX: %f", max);
 
     for(int i = 0; i<m_occupancy_map.size(); i++)
     {
@@ -270,12 +277,6 @@ void MapGenerator::writeHeatmap()
             float concentration = m_concentration[i + j*m_occupancy_map.size()];
             image.at<uint8_t>(i, j) = (concentration / max) * 255;
         }
-    }
-    
-
-    {
-        Eigen::VectorXf residuals = m_measurements - m_lengthRayInCell * m_concentration;
-        RCLCPP_INFO(get_logger(), "Residual: %f", residuals.norm()); 
     }
 
     cv::Mat img_color;

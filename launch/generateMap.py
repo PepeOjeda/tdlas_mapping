@@ -22,7 +22,7 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {"rayMarchResolution": 0.4},
-                {"lambda": 0.0},
+                {"lambda": 0.1},
                 {"filepath": os.path.join(my_dir, "data", "measurement_log1")},
             ],
             on_exit=Shutdown()
