@@ -20,6 +20,7 @@ set(AMENT_DEPS
     rosgraph_msgs
     diagnostic_msgs
     olfaction_msgs
+    image_marker_msgs
     )
 
 foreach(Dependency IN ITEMS ${AMENT_DEPS})

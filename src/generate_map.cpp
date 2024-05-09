@@ -12,7 +12,7 @@
 #include <fmt/core.h>
 #include <filesystem>
 
-#include <lsqcpp/lsqcpp.hpp>
+#include <lsqcpp/lsqcpp.hpp> 
 
 #define RAYS_IMAGE 1
 
@@ -77,8 +77,8 @@ void MapGenerator::readFile()
     while(std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensor"]).pose );
-        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflector"]).pose );
+        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensorTF"]).pose );
+        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflectorTF"]).pose );
         TDLAS tdlas = jsonToTDLAS(json["reading"]);
 
         m_measurements[measurementIndex] = tdlas.average_ppmxm;
@@ -140,23 +140,19 @@ void MapGenerator::solve()
     
     lsqcpp::GaussNewtonX<float, ObjectiveFunction, lsqcpp::ArmijoBacktracking> optimizer;
 
-    // Set number of iterations as stop criterion.
     // Set it to 0 or negative for infinite iterations (default is 0).
     optimizer.setMaximumIterations(100);
 
-    // Set the minimum length of the gradient.
     // The optimizer stops minimizing if the gradient length falls below this
     // value.
     // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
     optimizer.setMinimumGradientLength(1e-6);
 
-    // Set the minimum length of the step.
     // The optimizer stops minimizing if the step length falls below this
     // value.
     // Set it to 0 or negative to disable this stop criterion (default is 1e-9).
     optimizer.setMinimumStepLength(1e-6);
 
-    // Set the minimum least squares error.
     // The optimizer stops minimizing if the error falls below this
     // value.
     // Set it to 0 or negative to disable this stop criterion (default is 0).
@@ -165,17 +161,13 @@ void MapGenerator::solve()
     // Set the parameters of the step refiner (Armijo Backtracking).
     optimizer.setRefinementParameters({0.8, 1e-4, 1e-7, 10.0, 0});
 
-    // Turn verbosity on, so the optimizer prints status updates after each
-    // iteration.
     optimizer.setVerbosity(1);
     optimizer.setOutputStream(std::cerr);
 
-    // Set initial guess.
     Eigen::VectorXf initialGuess(m_num_cells);
     for(Eigen::Index i = 0; i< initialGuess.size(); i++)
         initialGuess(i) = 0.0;
 
-    // Start the optimization.
     auto result = optimizer.minimize(initialGuess);
     m_concentration = result.xval;
     RCLCPP_INFO(get_logger(), "Iterations: %ld", result.iterations); 
