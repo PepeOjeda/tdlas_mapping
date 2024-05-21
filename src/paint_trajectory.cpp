@@ -72,8 +72,8 @@ public:
 
         {
             auto json = nlohmann::json::parse(line);
-            geometry_msgs::msg::PoseStamped rhodon = nav2MQTT::from_json(json["rhodon"]);
-            geometry_msgs::msg::PoseStamped giraff = nav2MQTT::from_json(json["giraff"]);
+            geometry_msgs::msg::PoseStamped rhodon = mqtt_serialization::pose_from_json(json["rhodon"]);
+            geometry_msgs::msg::PoseStamped giraff = mqtt_serialization::pose_from_json(json["giraff"]);
 
             giraffMarker.points.push_back(giraff.pose.position);
             arrowMarker.pose = rhodon.pose;

@@ -38,6 +38,8 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
     m_rayMarchResolution = declare_parameter<float>("rayMarchResolution", 0.05f);
     m_lambda = declare_parameter<float>("lambda", 0.01);
     m_input_filepath = declare_parameter<std::string>("filepath", "measurement_log");
+    m_sensor_name = declare_parameter<std::string>("sensor_name", "sensorTF");
+    m_reflector_name = declare_parameter<std::string>("reflector_name", "reflectorTF");
 
 }
 
@@ -77,8 +79,8 @@ void MapGenerator::readFile()
     while(std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensorTF"]).pose );
-        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflectorTF"]).pose );
+        tf2::Transform sensor = poseToTransform( mqtt_serialization::pose_from_json(json[m_sensor_name]).pose );
+        tf2::Transform reflector = poseToTransform( mqtt_serialization::pose_from_json(json[m_reflector_name]).pose );
         TDLAS tdlas = jsonToTDLAS(json["reading"]);
 
         m_measurements[measurementIndex] = tdlas.average_ppmxm;
@@ -159,7 +161,7 @@ void MapGenerator::solve()
     optimizer.setMinimumError(0);
 
     // Set the parameters of the step refiner (Armijo Backtracking).
-    optimizer.setRefinementParameters({0.8, 1e-4, 1e-7, 10.0, 0});
+    optimizer.setRefinementParameters(lsqcpp::ArmijoBacktrackingParameter<float>{0.8, 1e-4, 1e-7, 10.0, 0});
 
     optimizer.setVerbosity(1);
     optimizer.setOutputStream(std::cerr);
@@ -194,8 +196,8 @@ void MapGenerator::getEnvironment()
     while(std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform( nav2MQTT::from_json(json["sensor"]).pose );
-        tf2::Transform reflector = poseToTransform( nav2MQTT::from_json(json["reflector"]).pose );
+        tf2::Transform sensor = poseToTransform( mqtt_serialization::pose_from_json(json[m_sensor_name]).pose );
+        tf2::Transform reflector = poseToTransform( mqtt_serialization::pose_from_json(json[m_reflector_name]).pose );
 
         min.x = std::min({(double)min.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
         min.y = std::min({(double)min.y, sensor.getOrigin().y(), reflector.getOrigin().y()});

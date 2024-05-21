@@ -17,6 +17,8 @@ public:
     void writeHeatmap();
 private:
     std::string m_input_filepath;
+    std::string m_sensor_name;
+    std::string m_reflector_name;
     int m_num_cells;
     int m_num_measurements;
     float m_lambda;

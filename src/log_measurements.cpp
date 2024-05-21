@@ -25,6 +25,8 @@ public:
     std::string reflectorFrame;
 
     float aimingThresholdPx;
+    int targetPx_X;
+    int targetPx_Y;
 
     std::ofstream file;
     LogMeasurements() : Node("log_measurements"), tf_buffer(get_clock())
@@ -36,6 +38,8 @@ public:
         arucoSub = create_subscription<MarkerDetection>(arucoTopic, 1, std::bind(&LogMeasurements::Aruco_callback, this, std::placeholders::_1));
 
         aimingThresholdPx = declare_parameter<float>("aimingThresholdPx", 50);
+        targetPx_X = declare_parameter<int>("targetPx_X", 1920 / 2);
+        targetPx_Y = declare_parameter<int>("targetPx_Y", 1080 / 2);
 
         fixedFrame = declare_parameter<std::string>("fixedFrame", "");
         sensorFrame = declare_parameter<std::string>("sensorFrame", "");
@@ -63,18 +67,24 @@ public:
         //if we have seen the aruco recently
         if((now()-last_aruco.stamp).seconds()<0.5)
         {
-            aimingAtAruco = last_aruco.camera_space_point.x < aimingThresholdPx 
-                         && last_aruco.camera_space_point.y < aimingThresholdPx;
+            float errorX = std::abs(last_aruco.camera_space_point.x - targetPx_X);
+            float errorY = std::abs(last_aruco.camera_space_point.y - targetPx_Y);
+            aimingAtAruco =  errorX < aimingThresholdPx 
+                         &&  errorY < aimingThresholdPx;
+            
+            RCLCPP_WARN(get_logger(), "Aiming error: %.2f, %.2f px", errorX, errorY);
         }
+        else
+            RCLCPP_WARN(get_logger(), "We have not received aruco detections in a while.");
 
         geometry_msgs::msg::PoseStamped sensor_pose = getPoseFromTF(sensorFrame);
         geometry_msgs::msg::PoseStamped reflector_pose = getPoseFromTF(reflectorFrame);
         geometry_msgs::msg::PoseStamped aruco_pose = getPoseFromTF(last_aruco.transform.child_frame_id);
         
         nlohmann::json json_entry;
-        json_entry["sensorTF"] = nav2MQTT::to_json(sensor_pose);
-        json_entry["reflectorTF"] = nav2MQTT::to_json(reflector_pose);
-        json_entry["arucoTF"] = nav2MQTT::to_json(aruco_pose);
+        json_entry["sensorTF"] = mqtt_serialization::pose_to_json(sensor_pose);
+        json_entry["reflectorTF"] = mqtt_serialization::pose_to_json(reflector_pose);
+        json_entry["arucoTF"] = mqtt_serialization::pose_to_json(aruco_pose);
         json_entry["isAiming"] = aimingAtAruco;
         json_entry["reading"] = tdlasToJson(last_tdlas_msg);
         file << json_entry.dump();
@@ -92,6 +102,7 @@ public:
     void Aruco_callback(MarkerDetection::SharedPtr msg)
     {
         last_aruco = *msg;
+        last_aruco.stamp = now();
     }
 
     nlohmann::json tdlasToJson(const TDLAS& tdlas)
@@ -112,6 +123,7 @@ public:
             auto tf_stamped = tf_buffer.buffer.lookupTransform(fixedFrame, frame, tf2::TimePointZero);
             tf2::fromMsg(tf_stamped.transform, tf);
             pose.pose = transformToPose(tf);
+            pose.header.frame_id = fixedFrame;
             pose.header.stamp = now();
         }
         catch(const std::exception& e)
