@@ -21,7 +21,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {"filepath": os.path.join(my_dir, "data", "pass2")},
+                {"filepath": "tdlasLog_4.json"},
             ]
         ),
 

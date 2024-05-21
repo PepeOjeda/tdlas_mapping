@@ -10,34 +10,34 @@ using MarkerArray=visualization_msgs::msg::MarkerArray;
 class TrajectoryPainter : public rclcpp::Node
 {
 public:
-    rclcpp::Publisher<MarkerArray>::SharedPtr rhodonPub;
-    rclcpp::Publisher<Marker>::SharedPtr giraffPub;
+    rclcpp::Publisher<MarkerArray>::SharedPtr sensorPub;
+    rclcpp::Publisher<Marker>::SharedPtr reflectorPub;
     
     TrajectoryPainter(): Node("Trajectory")
     {
-        giraffPub = create_publisher<Marker>("/giraff_marker", rclcpp::QoS(1).reliable().transient_local());
-        rhodonPub = create_publisher<MarkerArray>("/rhodon_marker", rclcpp::QoS(1).reliable().transient_local());
+        reflectorPub = create_publisher<Marker>("/reflector_marker", rclcpp::QoS(1).reliable().transient_local());
+        sensorPub = create_publisher<MarkerArray>("/sensor_marker", rclcpp::QoS(1).reliable().transient_local());
         declare_parameter<std::string>("filepath");
     }
 
 
     void readFileAndCreateMarkers()
     {
-        MarkerArray rhodonMarker;
-        Marker giraffMarker;
+        MarkerArray sensorMarker;
+        Marker reflectorMarker;
         {
-            giraffMarker.header.frame_id="map";
-            giraffMarker.action=Marker::ADD;
-            giraffMarker.id=0;
-            giraffMarker.type = Marker::POINTS;
-            giraffMarker.scale.x = 0.1;
-            giraffMarker.scale.y = 0.1;
-            giraffMarker.scale.z = 0.1;
+            reflectorMarker.header.frame_id="map";
+            reflectorMarker.action=Marker::ADD;
+            reflectorMarker.id=0;
+            reflectorMarker.type = Marker::POINTS;
+            reflectorMarker.scale.x = 0.1;
+            reflectorMarker.scale.y = 0.1;
+            reflectorMarker.scale.z = 0.1;
 
-            giraffMarker.color.r = 1;
-            giraffMarker.color.g = 0;
-            giraffMarker.color.b = 0;
-            giraffMarker.color.a = 1;
+            reflectorMarker.color.r = 1;
+            reflectorMarker.color.g = 0;
+            reflectorMarker.color.b = 0;
+            reflectorMarker.color.a = 1;
         }
 
 
@@ -72,18 +72,18 @@ public:
 
         {
             auto json = nlohmann::json::parse(line);
-            geometry_msgs::msg::PoseStamped rhodon = mqtt_serialization::pose_from_json(json["rhodon"]);
-            geometry_msgs::msg::PoseStamped giraff = mqtt_serialization::pose_from_json(json["giraff"]);
+            geometry_msgs::msg::PoseStamped sensor = mqtt_serialization::pose_from_json(json["sensorTF"]);
+            geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["arucoTF"]);
 
-            giraffMarker.points.push_back(giraff.pose.position);
-            arrowMarker.pose = rhodon.pose;
+            reflectorMarker.points.push_back(reflector.pose.position);
+            arrowMarker.pose = sensor.pose;
             arrowMarker.id = markerId++;
-            rhodonMarker.markers.push_back(arrowMarker);
+            sensorMarker.markers.push_back(arrowMarker);
         }
 
         //RCLCPP_INFO(get_logger(), "PUBLISHING MARKERS");
-        giraffPub->publish(giraffMarker);
-        rhodonPub->publish(rhodonMarker);
+        reflectorPub->publish(reflectorMarker);
+        sensorPub->publish(sensorMarker);
     }
 };
 

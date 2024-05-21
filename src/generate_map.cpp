@@ -168,7 +168,7 @@ void MapGenerator::solve()
 
     Eigen::VectorXf initialGuess(m_num_cells);
     for(Eigen::Index i = 0; i< initialGuess.size(); i++)
-        initialGuess(i) = 0.0;
+        initialGuess(i) = 10.0;
 
     auto result = optimizer.minimize(initialGuess);
     m_concentration = result.xval;
