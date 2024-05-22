@@ -124,13 +124,17 @@ struct ObjectiveFunction
         fval(0) = (measurements-predictedReading).norm();
 
         Eigen::Index rows = predictedReading.rows();
+        
+        float sum = 0;
+        #pragma omp parallel for reduction(+:sum)
         for(Eigen::Index i = 0; i<rows; i++)
         {
             auto val = predictedReading(i);
-            fval(0) += val * val * lambda;
+            sum += val * val * lambda;
             if(val < 0)
-                fval(0) += 10000 * std::abs(val);
+                sum += 10000 * std::abs(val);
         }
+        fval(0) = sum;
     }
 };
 

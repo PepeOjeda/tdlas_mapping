@@ -20,13 +20,14 @@ def launch_setup(context, *args, **kwargs):
         executable="log_measurements",
         #prefix ="",
         parameters=[
-           {"file_path":"tdlasLog_4.json"},
+           {"file_path":"tdlas/tdlasLog_2_3.json"},
            
            {"tdlasTopic":"/falcon/reading"},
            
            {"fixedFrame":"map"},
            {"sensorFrame":"camera"},
            {"reflectorFrame":"gps_hunter"},
+           {"arucoFrame":"ArucoMarker_23"},
 
            {"arucoTopic":"/methane/aruco/detections"},
            {"aimingThresholdPx": 300.0},

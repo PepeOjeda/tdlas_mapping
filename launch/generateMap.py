@@ -23,9 +23,9 @@ def generate_launch_description():
             parameters=[
                 {"rayMarchResolution": 0.4},
                 {"lambda": 0.1},
-                {"filepath": "/home/pepe/colcon_ws/tdlasLog_4.json"},
+                {"filepath": "tdlas/1-1.json"},
                 {"sensor_name": "sensorTF"},
-                {"reflector_name": "arucoTF"},
+                {"reflector_name": "reflectorTF"},
             ],
             on_exit=Shutdown()
         ),

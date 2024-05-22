@@ -23,6 +23,7 @@ public:
     std::string fixedFrame;
     std::string sensorFrame;
     std::string reflectorFrame;
+    std::string arucoFrame;
 
     float aimingThresholdPx;
     int targetPx_X;
@@ -44,6 +45,7 @@ public:
         fixedFrame = declare_parameter<std::string>("fixedFrame", "");
         sensorFrame = declare_parameter<std::string>("sensorFrame", "");
         reflectorFrame = declare_parameter<std::string>("reflectorFrame", "");
+        arucoFrame = declare_parameter<std::string>("arucoFrame", "");
         
         auto filepath = declare_parameter<std::string>("file_path", "measurement_log");
         file.open(filepath);
@@ -79,7 +81,7 @@ public:
 
         geometry_msgs::msg::PoseStamped sensor_pose = getPoseFromTF(sensorFrame);
         geometry_msgs::msg::PoseStamped reflector_pose = getPoseFromTF(reflectorFrame);
-        geometry_msgs::msg::PoseStamped aruco_pose = getPoseFromTF(last_aruco.transform.child_frame_id);
+        geometry_msgs::msg::PoseStamped aruco_pose = getPoseFromTF(arucoFrame);
         
         nlohmann::json json_entry;
         json_entry["sensorTF"] = mqtt_serialization::pose_to_json(sensor_pose);

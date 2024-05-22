@@ -21,7 +21,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {"filepath": "tdlasLog_4.json"},
+                {"filepath": "tdlas/1-1.json"},
             ]
         ),
 
@@ -32,7 +32,7 @@ def generate_launch_description():
             name='map_server',
             output='screen',
             parameters=[
-                {'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
+                #{'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
                 {'frame_id' : 'map'}
                 ],
             ),
@@ -55,7 +55,7 @@ def generate_launch_description():
             package="rviz2",
             executable="rviz2",
             name="rviz2",
-            arguments=['-d', os.path.join(my_dir, 'launch', 'simulation', 'tdlas_mapping.rviz')],
+            arguments=['-d', os.path.join(my_dir, 'launch', 'trajectory.rviz')],
             output="log",
             prefix='xterm -hold -e',
         ),
