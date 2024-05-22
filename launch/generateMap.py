@@ -22,8 +22,8 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {"rayMarchResolution": 0.4},
-                {"lambda": 0.1},
-                {"filepath": "tdlas/1-1.json"},
+                {"lambda": 0.3},
+                {"filepath": "/home/pepe/colcon_ws/tdlas/1_1.json"},
                 {"sensor_name": "sensorTF"},
                 {"reflector_name": "reflectorTF"},
             ],

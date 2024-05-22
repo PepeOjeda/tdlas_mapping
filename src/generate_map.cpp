@@ -43,6 +43,54 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
 
 }
 
+
+void MapGenerator::getEnvironment()
+{    
+    // We are going to assume an empty map that's just the bounds of the measurements
+    // for an example of how to actually do this for real, see the robot2023 branch
+    std::ifstream file(m_input_filepath);
+    if(!file.is_open())
+    {
+        RCLCPP_ERROR(get_logger(), "Could not open file %s", m_input_filepath.c_str());
+        raise(SIGTRAP);
+    }
+
+    uint num_cells_x, num_cells_y;
+    //find environment dimensions (Bounding box)
+    glm::vec2 min{FLT_MAX, FLT_MAX}, max{-FLT_MAX, -FLT_MAX};
+    std::string line;
+    while(std::getline(file, line))
+    {
+        auto json = nlohmann::json::parse(line);
+        tf2::Transform sensor = poseToTransform( mqtt_serialization::pose_from_json(json[m_sensor_name]).pose );
+        tf2::Transform reflector = poseToTransform( mqtt_serialization::pose_from_json(json[m_reflector_name]).pose );
+
+        min.x = std::min({(double)min.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
+        min.y = std::min({(double)min.y, sensor.getOrigin().y(), reflector.getOrigin().y()});
+
+        max.x = std::max({(double)max.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
+        max.y = std::max({(double)max.y, sensor.getOrigin().y(), reflector.getOrigin().y()});       
+    }
+
+    //a little bit of arbitrary padding around the used area
+    max += glm::vec2{m_rayMarchResolution * 4,m_rayMarchResolution * 4};
+    min += glm::vec2{-m_rayMarchResolution * 4,-m_rayMarchResolution * 4};
+
+
+    RCLCPP_INFO(get_logger(), "Environment bounds: (%.2f, %.2f) --- (%.2f, %.2f)", min.x, min.y, max.x, max.y);
+    num_cells_x = std::ceil( (max.x-min.x) / m_rayMarchResolution );
+    num_cells_y = std::ceil( (max.y-min.y) / m_rayMarchResolution );
+
+    file.close();
+    
+    m_num_cells = num_cells_x * num_cells_y;
+    
+    m_mapOrigin.x = min.x;
+    m_mapOrigin.y = min.y;
+    
+    m_occupancy_map.resize(num_cells_x, std::vector<bool>(num_cells_y, true) );
+}
+
 void MapGenerator::readFile()
 {
     std::ifstream file(m_input_filepath);
@@ -76,6 +124,7 @@ void MapGenerator::readFile()
     rays_image.setTo(cv::Vec3b(255,255,255));
 #endif
 
+    uint numLines = 0;
     while(std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
@@ -87,12 +136,15 @@ void MapGenerator::readFile()
 
         //fill in the cell raytracing thing
         glm::vec2 rayOrigin = glm::fromTF( sensor.getOrigin() );
-        glm::vec2 rayDirection = glm::fromTF( tf2::quatRotate(sensor.getRotation(), {0,1,0}) ); 
         glm::vec2 reflectorPosition = glm::fromTF( reflector.getOrigin() );
+        //glm::vec2 rayDirection = glm::fromTF( tf2::quatRotate(sensor.getRotation(), {0,1,0}) ); 
+        glm::vec2 rayDirection = glm::normalize(reflectorPosition-rayOrigin); 
 
         runDDA(rayOrigin, rayDirection, reflectorPosition, measurementIndex, tdlas.average_ppmxm);
         measurementIndex++;
+        numLines++;
     }
+    RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
     file.close();
 
 #if RAYS_IMAGE
@@ -104,8 +156,54 @@ void MapGenerator::readFile()
                 rays_image.at<cv::Vec3b>(i, j) = cv::Vec3b(0,0,0);
         }
     }
+
     cv::imwrite("rays.png", rays_image); 
 #endif
+}
+
+
+void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, int ppmxm)
+{
+    constexpr float reflectorRadius = 0.26;
+
+    static auto identity = [](const bool& b){return b;};
+    
+    auto doesNotCollideWithReflector = [reflectorPosition, reflectorRadius](const glm::vec2& position)
+    {
+        return glm::distance(position, reflectorPosition) > reflectorRadius;
+    };
+
+    DDA::_2D::RayMarchInfo rayData =  DDA::_2D::marchRay<bool>(origin, direction, FLT_MAX, 
+        {m_occupancy_map, m_mapOrigin, m_rayMarchResolution},
+        identity, doesNotCollideWithReflector);
+    
+    for(const auto& [index, length] : rayData.lengthInCell)
+    {
+        uint columnIndex = index2Dto1D(index);
+        m_lengthRayInCell(rowIndex,columnIndex) = length; 
+        
+
+#if RAYS_IMAGE   
+#define DEBUG_POSITIONS 0
+    #if DEBUG_POSITIONS
+        // DEBUG - Draw only the final positions
+        glm::ivec2 indices = (reflectorPosition-m_mapOrigin)/m_rayMarchResolution;
+        cv::Vec3b& r_image = rays_image.at<cv::Vec3b>(indices.x, indices.y); 
+        r_image = cv::Vec3b( 0, 0 , 255 );
+        
+        indices = (origin-m_mapOrigin)/m_rayMarchResolution;
+        rays_image.at<cv::Vec3b>(indices.x, indices.y) = cv::Vec3b( 0, 255 , 0 );
+    #else
+        //Draw the rays
+        cv::Vec3b& r_image = rays_image.at<cv::Vec3b>(index.x, index.y); 
+        double previous = 255-r_image[0];
+        double this_value = 255 * std::min(1.0, ppmxm/150.0);
+        
+        uint8_t value = (uint8_t) std::max(previous , this_value);
+        r_image = cv::Vec3b( 255-value , 255-value, 255 );
+    #endif
+#endif
+    }
 }
 
 struct ObjectiveFunction
@@ -126,7 +224,7 @@ struct ObjectiveFunction
         Eigen::Index rows = predictedReading.rows();
         
         float sum = 0;
-        #pragma omp parallel for reduction(+:sum)
+        //#pragma omp parallel for reduction(+:sum)
         for(Eigen::Index i = 0; i<rows; i++)
         {
             auto val = predictedReading(i);
@@ -165,7 +263,7 @@ void MapGenerator::solve()
     optimizer.setMinimumError(0);
 
     // Set the parameters of the step refiner (Armijo Backtracking).
-    optimizer.setRefinementParameters(lsqcpp::ArmijoBacktrackingParameter<float>{0.8, 1e-4, 1e-7, 10.0, 0});
+    optimizer.setRefinementParameters(lsqcpp::ArmijoBacktrackingParameter<float>{0.7, 0.1, 0.1, 10.0, 10});
 
     optimizer.setVerbosity(1);
     optimizer.setOutputStream(std::cerr);
@@ -178,84 +276,6 @@ void MapGenerator::solve()
     m_concentration = result.xval;
     RCLCPP_INFO(get_logger(), "Iterations: %ld", result.iterations); 
     RCLCPP_INFO(get_logger(), "Residual: %f", result.fval.norm()); 
-}
-
-
-
-void MapGenerator::getEnvironment()
-{    
-    // We are going to assume an empty map that's just the bounds of the measurements
-    // for an example of how to actually do this for real, see the robot2023 branch
-    std::ifstream file(m_input_filepath);
-    if(!file.is_open())
-    {
-        RCLCPP_ERROR(get_logger(), "Could not open file %s", m_input_filepath.c_str());
-        raise(SIGTRAP);
-    }
-
-    uint num_cells_x, num_cells_y;
-    //find environment dimensions (Bounding box)
-    glm::vec2 min{FLT_MAX, FLT_MAX}, max{-FLT_MAX, -FLT_MAX};
-    std::string line;
-    while(std::getline(file, line))
-    {
-        auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform( mqtt_serialization::pose_from_json(json[m_sensor_name]).pose );
-        tf2::Transform reflector = poseToTransform( mqtt_serialization::pose_from_json(json[m_reflector_name]).pose );
-
-        min.x = std::min({(double)min.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
-        min.y = std::min({(double)min.y, sensor.getOrigin().y(), reflector.getOrigin().y()});
-
-        max.x = std::max({(double)max.x, sensor.getOrigin().x(), reflector.getOrigin().x()});      
-        max.y = std::max({(double)max.y, sensor.getOrigin().y(), reflector.getOrigin().y()});       
-    }
-
-    RCLCPP_INFO(get_logger(), "Environment bounds: (%.2f, %.2f) --- (%.2f, %.2f)", min.x, min.y, max.x, max.y);
-    num_cells_x = (max.x-min.x) / m_rayMarchResolution;
-    num_cells_y = (max.y-min.y) / m_rayMarchResolution;
-
-    file.close();
-    
-    m_num_cells = num_cells_x * num_cells_y;
-    
-    m_mapOrigin.x = min.x;
-    m_mapOrigin.y = min.y;
-    
-    m_occupancy_map.resize(num_cells_x, std::vector<bool>(num_cells_y, true) );
-}
-
-
-void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, int ppmxm)
-{
-    constexpr float reflectorRadius = 0.26;
-
-    static auto identity = [](const bool& b){return b;};
-    
-    auto doesNotCollideWithReflector = [reflectorPosition, reflectorRadius](const glm::vec2& position)
-    {
-        return glm::distance(position, reflectorPosition) > reflectorRadius;
-    };
-
-    DDA::_2D::RayMarchInfo rayData =  DDA::_2D::marchRay<bool>(origin, direction, 10, 
-        {m_occupancy_map, m_mapOrigin, m_rayMarchResolution},
-        identity, doesNotCollideWithReflector);
-    
-    for(const auto& [index, length] : rayData.lengthInCell)
-    {
-        uint columnIndex = index2Dto1D(index);
-        m_lengthRayInCell(rowIndex,columnIndex) = length; 
-        
-
-#if RAYS_IMAGE       
-        cv::Vec3b& r_image = rays_image.at<cv::Vec3b>(index.x, index.y); 
-        
-        double previous = 255-r_image[0];
-        uint8_t value = (uint8_t) std::max(previous , 255 * (ppmxm/100.0));
-        r_image = cv::Vec3b( 255-value , 255-value, 255 );
-        
-        //r_image += cv::Vec3b(length*100, length * 100, length * 100);
-#endif
-    }
 }
 
 void MapGenerator::writeHeatmap()
@@ -273,7 +293,7 @@ void MapGenerator::writeHeatmap()
         for(int j=0; j<m_occupancy_map[0].size(); j++)
         {
             float concentration = m_concentration[i + j*m_occupancy_map.size()];
-            image.at<uint8_t>(i, j) = (concentration / max) * 255;
+            image.at<uint8_t>(i, j) = (uint8_t) ((concentration / max) * 255);
         }
     }
 

@@ -67,21 +67,22 @@ public:
         
         
         int markerId = 0;
+        uint numLines = 0;
         std::string line;
         while(std::getline(file, line))
-
         {
             auto json = nlohmann::json::parse(line);
             geometry_msgs::msg::PoseStamped sensor = mqtt_serialization::pose_from_json(json["sensorTF"]);
-            geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["arucoTF"]);
+            geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["reflectorTF"]);
 
             reflectorMarker.points.push_back(reflector.pose.position);
             arrowMarker.pose = sensor.pose;
             arrowMarker.id = markerId++;
             sensorMarker.markers.push_back(arrowMarker);
+            numLines++;
         }
 
-        //RCLCPP_INFO(get_logger(), "PUBLISHING MARKERS");
+        RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
         reflectorPub->publish(reflectorMarker);
         sensorPub->publish(sensorMarker);
     }
