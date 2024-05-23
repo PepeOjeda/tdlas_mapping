@@ -143,6 +143,11 @@ void MapGenerator::readFile()
         runDDA(rayOrigin, rayDirection, reflectorPosition, measurementIndex, tdlas.average_ppmxm);
         measurementIndex++;
         numLines++;
+
+#if RAYS_IMAGE
+        glm::vec2 indices = (rayOrigin-m_mapOrigin)/m_rayMarchResolution;
+        rays_image.at<cv::Vec3b>(indices.x, indices.y) = cv::Vec3b( 0, 255 , 0 );
+#endif
     }
     RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
     file.close();
@@ -200,7 +205,8 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         double this_value = 255 * std::min(1.0, ppmxm/150.0);
         
         uint8_t value = (uint8_t) std::max(previous , this_value);
-        r_image = cv::Vec3b( 255-value , 255-value, 255 );
+        if(r_image != cv::Vec3b(0, 255, 0))
+            r_image = cv::Vec3b( 255-value , 255-value, 255 );
     #endif
 #endif
     }
@@ -330,8 +336,8 @@ int main(int argc, char** argv)
     
     node->getEnvironment();
     node->readFile();
-    node->solve();
-    node->writeHeatmap();
+    //node->solve();
+    //node->writeHeatmap();
 
     rclcpp::shutdown();
     return 0;

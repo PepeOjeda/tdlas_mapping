@@ -3,6 +3,7 @@
 #include <fstream>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 using Marker=visualization_msgs::msg::Marker;
 using MarkerArray=visualization_msgs::msg::MarkerArray;
@@ -76,15 +77,34 @@ public:
             geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["reflectorTF"]);
 
             reflectorMarker.points.push_back(reflector.pose.position);
+
+            glm::quat cameraRotation = geoMsgToGLM(sensor.pose.orientation);
+            glm::quat fixedRotation(glm::vec3{0, M_PI/2, 0});
+            glm::quat combinedRotation = glm::cross(cameraRotation, fixedRotation);
+            sensor.pose.orientation = glmToGeoMsg(combinedRotation);
             arrowMarker.pose = sensor.pose;
             arrowMarker.id = markerId++;
             sensorMarker.markers.push_back(arrowMarker);
             numLines++;
         }
 
-        RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
+        //RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
         reflectorPub->publish(reflectorMarker);
         sensorPub->publish(sensorMarker);
+    }
+
+    glm::quat geoMsgToGLM(const geometry_msgs::msg::Quaternion& q)
+    {
+        return glm::quat(q.w, q.x, q. y, q.z);
+    }
+    geometry_msgs::msg::Quaternion glmToGeoMsg(const glm::quat& q)
+    {
+        geometry_msgs::msg::Quaternion qat;
+        qat.x = q.x;
+        qat.y = q.y;
+        qat.z = q.z;
+        qat.w = q.w;
+        return qat;
     }
 };
 

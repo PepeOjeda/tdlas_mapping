@@ -23,7 +23,7 @@ def generate_launch_description():
             parameters=[
                 {"rayMarchResolution": 0.4},
                 {"lambda": 0.3},
-                {"filepath": "/home/pepe/colcon_ws/tdlas/1_1.json"},
+                {"filepath": "tdlas/1_1.json"},
                 {"sensor_name": "sensorTF"},
                 {"reflector_name": "reflectorTF"},
             ],

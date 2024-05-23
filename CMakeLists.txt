@@ -54,6 +54,7 @@ ${AMENT_DEPS}
 
 #Trajectory painter
 add_executable(paint_trajectory src/paint_trajectory.cpp)
+target_include_directories(paint_trajectory PRIVATE include/DDA/third_party/glm)
 ament_target_dependencies(paint_trajectory
 ${AMENT_DEPS}
 ) 

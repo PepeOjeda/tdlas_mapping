@@ -21,35 +21,35 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {"filepath": "/home/pepe/colcon_ws/tdlas/logs/tdlasLog_2_1.json"},
+                {"filepath": "/home/pepe/HDD/colcon_ws/tdlas/1_1.json"},
             ]
         ),
 
 
-        Node(
-            package='nav2_map_server',
-            executable='map_server',
-            name='map_server',
-            output='screen',
-            parameters=[
-                #{'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
-                {'frame_id' : 'map'}
-                ],
-            ),
-        # LIFECYCLE MANAGER
-        Node(
-            package='nav2_lifecycle_manager',
-            executable='lifecycle_manager',
-            name='lifecycle_manager_navigation',
-            output='screen',
-            parameters=[{'use_sim_time': False},
-                        {'autostart': True},
-                        {'node_names': [
-                            'map_server',
-                            ]
-                        }
-            ]
-        ),
+        #Node(
+        #    package='nav2_map_server',
+        #    executable='map_server',
+        #    name='map_server',
+        #    output='screen',
+        #    parameters=[
+        #        #{'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
+        #        {'frame_id' : 'map'}
+        #        ],
+        #    ),
+        ## LIFECYCLE MANAGER
+        #Node(
+        #    package='nav2_lifecycle_manager',
+        #    executable='lifecycle_manager',
+        #    name='lifecycle_manager_navigation',
+        #    output='screen',
+        #    parameters=[{'use_sim_time': False},
+        #                {'autostart': True},
+        #                {'node_names': [
+        #                    'map_server',
+        #                    ]
+        #                }
+        #    ]
+        #),
 
         Node(
             package="rviz2",
