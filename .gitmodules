@@ -1,6 +1,3 @@
 [submodule "include/DDA"]
 	path = include/DDA
 	url = git@github.com:PepeOjeda/DDA.git
-[submodule "third_party/least-squares-cpp"]
-	path = third_party/least-squares-cpp
-	url = git@github.com:Rookfighter/least-squares-cpp.git

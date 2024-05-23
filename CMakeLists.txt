@@ -27,6 +27,7 @@ foreach(Dependency IN ITEMS ${AMENT_DEPS})
   find_package(${Dependency} REQUIRED)
 endforeach()
 
+find_package(Ceres)
 
 
 include_directories(include)
@@ -43,11 +44,12 @@ find_package(OpenCV REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(fmt REQUIRED)
 add_executable(generate_map src/generate_map.cpp)
-target_include_directories(generate_map PRIVATE include/DDA/include third_party/least-squares-cpp/include)
+target_include_directories(generate_map PRIVATE include/DDA/include)
 target_link_libraries(generate_map 
     ${OpenCV_LIBS} 
     fmt 
-    OpenMP::OpenMP_CXX)
+    OpenMP::OpenMP_CXX
+    Ceres::ceres)
 ament_target_dependencies(generate_map
 ${AMENT_DEPS}
 ) 
