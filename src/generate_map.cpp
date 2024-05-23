@@ -38,6 +38,7 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
 {
     m_rayMarchResolution = declare_parameter<float>("rayMarchResolution", 0.05f);
     m_lambda = declare_parameter<float>("lambda", 0.01);
+    m_prior = declare_parameter<double>("prior", 0.0);
     m_input_filepath = declare_parameter<std::string>("filepath", "measurement_log");
     m_sensor_name = declare_parameter<std::string>("sensor_name", "sensorTF");
     m_reflector_name = declare_parameter<std::string>("reflector_name", "reflectorTF");
@@ -106,9 +107,8 @@ void MapGenerator::readFile()
         numberOfMeasurements++;
 
     m_measurements.resize(numberOfMeasurements);
-    m_lengthRayInCell.resize(numberOfMeasurements, m_num_cells);
+    m_lengthRayInCell.resize(numberOfMeasurements, std::vector<double>(m_num_cells, m_prior));
     m_concentration.resize(m_num_cells);
-    m_lengthRayInCell.fill(m_lambda); // prior correction
 
     // restart the ifstream
     file.clear();
@@ -179,7 +179,7 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
     for (const auto& [index, length] : rayData.lengthInCell)
     {
         uint columnIndex = index2Dto1D(index);
-        m_lengthRayInCell(rowIndex, columnIndex) = length;
+        m_lengthRayInCell[rowIndex][columnIndex] = length;
 
 #if RAYS_IMAGE
 #define DEBUG_POSITIONS 0
@@ -207,64 +207,79 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
 
 struct CostFunctor
 {
-    static inline Eigen::MatrixXd lengthInCell;
-    static inline Eigen::VectorXd measurements;
+    static inline std::vector<std::vector<double>> lengthInCell;
+    static inline std::vector<double> measurements;
     static inline double lambda;
+
+    int rowIndex; //each CostFunctor object works on a single row of the matrix
+    CostFunctor(int i) : rowIndex(i)
+    {}
 
     template <typename T> 
     bool operator()(T const* const* x, T* residuals) const
     {
         const T* concentrations = *x;
-        std::vector<T> predictedReading(measurements.size());
-        for (int i = 0; i < measurements.size(); i++)
-            predictedReading[i] = DotProduct(lengthInCell.row(i), concentrations);
-
-        T sum{0};
-        //#pragma omp parallel for reduction(+:sum)
-        for (Eigen::Index i = 0; i < predictedReading.size(); i++)
-        {
-            T val = predictedReading[i];
-            sum += ceres::abs(val - measurements(i)) + val * val * lambda;
-        }
-        residuals[0] = sum;
+        T predictedReading = DotProduct(lengthInCell[rowIndex], concentrations);
+        T concentrationsNorm = norm(concentrations, lengthInCell[rowIndex].size());
+        residuals[0] = ceres::abs(predictedReading - measurements[rowIndex]) + concentrationsNorm * concentrationsNorm * lambda;
         return true;
     }
 
     template <typename T> 
-    T DotProduct(const Eigen::DenseBase<Eigen::Matrix<double, -1, -1> >::RowXpr& row, const T* concentrations) const
+    T DotProduct(const std::vector<double>& row, const T* concentrations) const
     {
         T sum{0};
         for (int i = 0; i < row.size(); i++)
-            sum += row(i) * concentrations[i];
+            sum += row[i] * concentrations[i];
         return sum;
     }
 
+    template <typename T>
+    T norm(const T* array, size_t size) const
+    {
+        T sum{0};
+        for(int i = 0; i < size; i++)
+        {
+            sum += array[i] * array[i];
+        }
+        return sum;//ceres::sqrt(sum+1e-8);
+    }
 };
 
 void MapGenerator::solve()
 {
+    google::InitGoogleLogging("Ceres");
     ceres::Problem problem;
 
     CostFunctor::lengthInCell = m_lengthRayInCell;
     CostFunctor::lambda = m_lambda;
     CostFunctor::measurements = m_measurements;
 
-    auto* cost_function = new ceres::DynamicAutoDiffCostFunction<CostFunctor, 4>(new CostFunctor());
-    cost_function->AddParameterBlock(m_concentration.size());
-    cost_function->SetNumResiduals(1);
+    for(int i = 0; i<m_lengthRayInCell.size(); i++)
+    {
+        auto* cost_function = new ceres::DynamicAutoDiffCostFunction<CostFunctor, 4>(new CostFunctor(i));
+        cost_function->SetNumResiduals(1);
+        cost_function->AddParameterBlock(m_concentration.size());
+        problem.AddResidualBlock(cost_function, nullptr, m_concentration.data());
+    }
+    
+    for(int i = 0; i<m_concentration.size(); i++)
+    {
+        problem.SetParameterLowerBound(m_concentration.data(), i, 0.0);
+        problem.SetParameterUpperBound(m_concentration.data(), i, 1000.0);
+    }
 
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_QR;
+    options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     options.minimizer_progress_to_stdout = false;
+    options.logging_type = ceres::PER_MINIMIZER_ITERATION;
+    options.max_num_iterations=100;
+    options.num_threads = 10;
 
-    Eigen::VectorXd initialGuess(m_num_cells);
-    for (Eigen::Index i = 0; i < initialGuess.size(); i++)
-        initialGuess(i) = 10.0;
-
-    problem.AddResidualBlock(cost_function, nullptr, initialGuess.data());
 
     ceres::Solver::Summary summary;
     Solve(options, &problem, &summary);
+    RCLCPP_INFO(get_logger(), "Done! Took %.2fs", summary.total_time_in_seconds);
     RCLCPP_INFO(get_logger(), "Summary:\n%s", summary.BriefReport().c_str());
 }
 
