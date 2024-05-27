@@ -21,9 +21,10 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {"rayMarchResolution": 0.4},
+                {"rayMarchResolution": 2.0},
                 {"lambda": 0.3},
-                {"filepath": "tdlas/1_1.json"},
+                {"prior": 10.0},
+                {"filepath": "/home/pepe/colcon_ws/tdlas/toy.json"},
                 {"sensor_name": "sensorTF"},
                 {"reflector_name": "reflectorTF"},
             ],

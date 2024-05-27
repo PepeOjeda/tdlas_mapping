@@ -22,10 +22,11 @@ private:
     int m_num_cells;
     int m_num_measurements;
     float m_lambda;
+    double m_prior;
 
-    Eigen::VectorXd m_concentration; //(num_cells);
-    Eigen::VectorXd m_measurements; //(num_measurements);
-    Eigen::MatrixXd m_lengthRayInCell; //(num_measurements, num_cells);
+    std::vector<double> m_concentration; //(num_cells);
+    std::vector<double> m_measurements; //(num_measurements);
+    std::vector<std::vector<double>> m_lengthRayInCell; //(num_measurements, num_cells);
 
     std::vector<std::vector<bool>> m_occupancy_map;
     float m_rayMarchResolution;
