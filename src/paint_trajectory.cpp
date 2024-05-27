@@ -34,12 +34,12 @@ public:
             reflectorMarker.action=Marker::ADD;
             reflectorMarker.id=0;
             reflectorMarker.type = Marker::POINTS;
-            reflectorMarker.scale.x = 0.1;
-            reflectorMarker.scale.y = 0.1;
-            reflectorMarker.scale.z = 0.1;
+            reflectorMarker.scale.x = 0.2;
+            reflectorMarker.scale.y = 0.2;
+            reflectorMarker.scale.z = 0.2;
 
             reflectorMarker.color.r = 0;
-            reflectorMarker.color.g = 1;
+            reflectorMarker.color.g = 0.6;
             reflectorMarker.color.b = 1;
             reflectorMarker.color.a = 1;
         }

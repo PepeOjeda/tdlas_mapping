@@ -8,7 +8,6 @@
 
 class MapGenerator : public rclcpp::Node
 {
-
 public:
     MapGenerator();
     void readFile();

@@ -21,7 +21,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {"filepath": "/home/pepe/HDD/colcon_ws/tdlas/1_1.json"},
+                {"filepath": "tdlas/1_1.json"},
             ]
         ),
 

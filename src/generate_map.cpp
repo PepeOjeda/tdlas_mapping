@@ -15,11 +15,8 @@
 #include <ceres/ceres.h>
 #include <ceres/dynamic_autodiff_cost_function.h>
 
-#define RAYS_IMAGE 1
 
-#if RAYS_IMAGE
 static cv::Mat rays_image;
-#endif
 
 using PoseStamped = geometry_msgs::msg::PoseStamped;
 using TDLAS = olfaction_msgs::msg::TDLAS;
@@ -98,8 +95,8 @@ void MapGenerator::readFile()
         numberOfMeasurements++;
 
     m_measurements.resize(numberOfMeasurements);
-    m_lengthRayInCell.resize(numberOfMeasurements, std::vector<double>(m_num_cells, m_prior));
-    m_concentration.resize(m_num_cells);
+    m_lengthRayInCell.resize(numberOfMeasurements, std::vector<double>(m_num_cells, 0.0));
+    m_concentration.resize(m_num_cells, m_prior);
 
     // restart the ifstream
     file.clear();
@@ -107,10 +104,8 @@ void MapGenerator::readFile()
 
     int measurementIndex = 0;
 
-#if RAYS_IMAGE
     rays_image.create(cv::Size(m_occupancy_map[0].size(), m_occupancy_map.size()), CV_8UC3);
     rays_image.setTo(cv::Vec3b(255, 255, 255));
-#endif
 
     uint numLines = 0;
     while (std::getline(file, line))
@@ -132,15 +127,12 @@ void MapGenerator::readFile()
         measurementIndex++;
         numLines++;
 
-#if RAYS_IMAGE
         glm::vec2 indices = (rayOrigin - m_mapOrigin) / m_rayMarchResolution;
         rays_image.at<cv::Vec3b>(indices.x, indices.y) = cv::Vec3b(0, 255, 0);
-#endif
     }
     RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
     file.close();
 
-#if RAYS_IMAGE
     for (int i = 0; i < m_occupancy_map.size(); i++)
     {
         for (int j = 0; j < m_occupancy_map[0].size(); j++)
@@ -151,7 +143,6 @@ void MapGenerator::readFile()
     }
 
     cv::imwrite("rays.png", rays_image);
-#endif
 }
 
 void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, int ppmxm)
@@ -172,7 +163,6 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         uint columnIndex = index2Dto1D(index);
         m_lengthRayInCell[rowIndex][columnIndex] = length;
 
-#if RAYS_IMAGE
 #define DEBUG_POSITIONS 0
 #if DEBUG_POSITIONS
         // DEBUG - Draw only the final positions
@@ -192,18 +182,18 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         if (r_image != cv::Vec3b(0, 255, 0))
             r_image = cv::Vec3b(255 - value, 255 - value, 255);
 #endif
-#endif
     }
 }
 
-struct CostFunctor
+struct RayFunctor
 {
     static inline std::vector<std::vector<double>> lengthInCell;
     static inline std::vector<double> measurements;
     static inline double lambda;
 
-    int rowIndex; //each CostFunctor object works on a single row of the matrix
-    CostFunctor(int i) : rowIndex(i)
+    int rowIndex;             // each CostFunctor object works on a single row of the matrix
+    std::vector<int> indices; // each instance of the functor uses only a subset of the cells as parameters. this tells you which ones
+    RayFunctor(int i) : rowIndex(i)
     {}
 
     template <typename T> 
@@ -211,30 +201,70 @@ struct CostFunctor
     {
         const T* concentrations = *x;
         T predictedReading = DotProduct(lengthInCell[rowIndex], concentrations);
-        T concentrationsNorm = norm(concentrations, lengthInCell[rowIndex].size());
-        residuals[0] = ceres::abs(predictedReading - measurements[rowIndex]) + concentrationsNorm * concentrationsNorm * lambda;
+        residuals[0] = ceres::abs(predictedReading - measurements[rowIndex]);
+        return true;
+    }
+
+    template <typename T> T 
+    DotProduct(const std::vector<double>& row, const T* concentrations) const
+    {
+        T sum{0};
+        for (int i = 0; i < indices.size(); i++)
+            sum += row[indices[i]] * concentrations[i];
+        return sum;
+    }
+};
+
+struct LambdaFunctor
+{
+    static inline double lambda;
+    int size;
+    LambdaFunctor(int _size): size(_size)
+    {}
+
+    template <typename T> 
+    bool operator()(T const* const* x, T* residuals) const
+    {
+        const T* concentrations = *x;
+        for (int i = 0; i < size; i++)
+            if(concentrations[i]< T{0})
+                return false;
+
+        T concentrationsNorm = squaredNorm(concentrations, size);
+        residuals[0] = concentrationsNorm * lambda;
         return true;
     }
 
     template <typename T> 
-    T DotProduct(const std::vector<double>& row, const T* concentrations) const
+    T squaredNorm(const T* array, size_t size) const
     {
         T sum{0};
-        for (int i = 0; i < row.size(); i++)
-            sum += row[i] * concentrations[i];
-        return sum;
-    }
-
-    template <typename T>
-    T norm(const T* array, size_t size) const
-    {
-        T sum{0};
-        for(int i = 0; i < size; i++)
+        for (int i = 0; i < size; i++)
         {
             sum += array[i] * array[i];
+            //sum += ceres::abs(array[i] -T{i}); //test
         }
-        return sum;//ceres::sqrt(sum+1e-8);
+        return sum;
     }
+};
+
+class IterationCallback : public ceres::IterationCallback
+{
+public:
+    explicit IterationCallback(MapGenerator& _mapGenerator) : mapGenerator(_mapGenerator)
+    {}
+
+    ceres::CallbackReturnType operator()(const ceres::IterationSummary& summary)
+    {
+        mapGenerator.writeHeatmap();
+        if(rclcpp::ok())
+            return ceres::SOLVER_CONTINUE;
+        else
+            return ceres::SOLVER_ABORT;
+    }
+
+private:
+    MapGenerator& mapGenerator;
 };
 
 void MapGenerator::solve()
@@ -242,43 +272,74 @@ void MapGenerator::solve()
     google::InitGoogleLogging("Ceres");
     ceres::Problem problem;
 
-    CostFunctor::lengthInCell = m_lengthRayInCell;
-    CostFunctor::lambda = m_lambda;
-    CostFunctor::measurements = m_measurements;
+    RayFunctor::lengthInCell = m_lengthRayInCell;
+    RayFunctor::lambda = m_lambda;
+    RayFunctor::measurements = m_measurements;
 
-    for(int i = 0; i<m_lengthRayInCell.size(); i++)
+    for (int i = 0; i < m_lengthRayInCell.size(); i++)
     {
-        auto* cost_function = new ceres::DynamicAutoDiffCostFunction<CostFunctor, 4>(new CostFunctor(i));
+        auto* functor = new RayFunctor(i);
+        auto* cost_function = new ceres::DynamicAutoDiffCostFunction<RayFunctor, 4>(functor);
+        std::vector<double*> params;
+        for (int j = 0; j < m_lengthRayInCell[i].size(); j++)
+            if (m_lengthRayInCell[i][j] != 0)
+            {
+                functor->indices.push_back(j);
+                params.push_back(&m_concentration[j]);
+                cost_function->AddParameterBlock(1);
+            }
         cost_function->SetNumResiduals(1);
-        cost_function->AddParameterBlock(m_concentration.size());
-        problem.AddResidualBlock(cost_function, nullptr, m_concentration.data());
+        problem.AddResidualBlock(cost_function, nullptr, params);
+
+        //for (int j = 0; j < params.size(); j++)
+        //    problem.SetParameterLowerBound(params[j], 0, 0.0);
     }
-    
-    for(int i = 0; i<m_concentration.size(); i++)
+
+    //separate functor to apply the lambda to the whole map
+    LambdaFunctor::lambda = m_lambda;
     {
-        problem.SetParameterLowerBound(m_concentration.data(), i, 0.0);
-        problem.SetParameterUpperBound(m_concentration.data(), i, 1000.0);
+        auto* cost_function = new ceres::DynamicAutoDiffCostFunction<LambdaFunctor, 4>(new LambdaFunctor(m_concentration.size()));
+        std::vector<double*> params;
+
+        for (int j = 0; j < m_concentration.size(); j++)
+        {
+            cost_function->AddParameterBlock(1);
+            params.push_back(&m_concentration[j]);
+        }
+
+        cost_function->SetNumResiduals(1);
+        problem.AddResidualBlock(cost_function, nullptr, params);
     }
 
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-    options.minimizer_progress_to_stdout = false;
-    options.logging_type = ceres::PER_MINIMIZER_ITERATION;
-    options.max_num_iterations=100;
-    options.num_threads = 10;
+    options.minimizer_type=ceres::LINE_SEARCH;
+    options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
+    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.use_explicit_schur_complement = true;
 
+    options.num_threads = 10;
+    options.minimizer_progress_to_stdout = true;
+    options.logging_type = ceres::PER_MINIMIZER_ITERATION;
+    options.max_num_iterations = 10000;
+    options.function_tolerance = 1e-9;
+    options.gradient_tolerance = 1e-12;
+
+    options.update_state_every_iteration = true;
+    options.callbacks.push_back(new IterationCallback(*this));
 
     ceres::Solver::Summary summary;
     Solve(options, &problem, &summary);
     RCLCPP_INFO(get_logger(), "Done! Took %.2fs", summary.total_time_in_seconds);
-    RCLCPP_INFO(get_logger(), "Summary:\n%s", summary.BriefReport().c_str());
+    RCLCPP_INFO(get_logger(), "Summary:\n%s", summary.FullReport().c_str());
 }
+
+
 
 void MapGenerator::writeHeatmap()
 {
     cv::Mat image(cv::Size(m_occupancy_map[0].size(), m_occupancy_map.size()), CV_8UC1, cv::Scalar(0, 0, 0));
 
-    float max = 0;
+    float max = -FLT_MAX;
     for (int i = 0; i < m_concentration.size(); i++)
         if (m_concentration[i] > max)
             max = m_concentration[i];
@@ -288,7 +349,10 @@ void MapGenerator::writeHeatmap()
         for (int j = 0; j < m_occupancy_map[0].size(); j++)
         {
             float concentration = m_concentration[i + j * m_occupancy_map.size()];
-            image.at<uint8_t>(i, j) = (uint8_t)((concentration / max) * 255);
+            if (max == 0)
+                image.at<uint8_t>(i, j) = 0;
+            else
+                image.at<uint8_t>(i, j) = (uint8_t)((concentration / max) * 255);
         }
     }
 

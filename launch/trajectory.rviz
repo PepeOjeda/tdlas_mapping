@@ -73,10 +73,10 @@ Visualization Manager:
         Value: /sensor_marker
       Value: true
     - Class: rviz_default_plugins/Marker
-      Enabled: true
+      Enabled: false
       Name: Rays
       Namespaces:
-        arrow: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -84,8 +84,8 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /rays_marker
-      Value: true
-    - Alpha: 0.699999988079071
+      Value: false
+    - Alpha: 0.800000011920929
       Blocks: 3
       Class: rviz_satellite/AerialMap
       Draw Behind: true
@@ -148,16 +148,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 30.34949493408203
+      Distance: 38.07040786743164
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 8.027823448181152
-        Y: 0.4483373165130615
-        Z: 0.06606168299913406
+        X: 12.333732604980469
+        Y: 1.4979615211486816
+        Z: 0.15127919614315033
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
