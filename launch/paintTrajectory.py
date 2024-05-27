@@ -26,31 +26,20 @@ def generate_launch_description():
         ),
 
 
-        #Node(
-        #    package='nav2_map_server',
-        #    executable='map_server',
-        #    name='map_server',
-        #    output='screen',
-        #    parameters=[
-        #        #{'yaml_filename' : os.path.join(my_dir, "maps", "parking.yaml")},
-        #        {'frame_id' : 'map'}
-        #        ],
-        #    ),
-        ## LIFECYCLE MANAGER
-        #Node(
-        #    package='nav2_lifecycle_manager',
-        #    executable='lifecycle_manager',
-        #    name='lifecycle_manager_navigation',
-        #    output='screen',
-        #    parameters=[{'use_sim_time': False},
-        #                {'autostart': True},
-        #                {'node_names': [
-        #                    'map_server',
-        #                    ]
-        #                }
-        #    ]
-        #),
-
+        Node(
+            package='gps2cartesian',
+            executable='fakeGPSpub',
+            name='fakeGPSpub',
+            output='screen',
+            parameters=[
+                {'gps_latitude' : 36.7159195233333},
+                {'gps_longitude' : -4.47891364833333},
+                {'gps_altitude' : 0.0},
+                {'gps_frame_id' : 'map'},
+                {'gps_topic_pub' : 'fake_gps'}
+                ],
+            ),
+        
         Node(
             package="rviz2",
             executable="rviz2",

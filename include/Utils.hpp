@@ -3,6 +3,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <olfaction_msgs/msg/tdlas.hpp>
+#include "json.hpp"
 
 namespace mqtt_serialization
 {
@@ -33,6 +35,15 @@ namespace mqtt_serialization
                 return _namespace + "/" + topicName;
             }
             return topicName;
+        }
+
+        inline olfaction_msgs::msg::TDLAS jsonToTDLAS(const nlohmann::json& json)
+        {
+            olfaction_msgs::msg::TDLAS tdlas;
+            tdlas.average_ppmxm = (double)json["average_ppmxm"].get<int>();
+            tdlas.average_absorption_strength = json["average_absorption_strength"].get<double>();
+            tdlas.average_reflection_strength = json["average_reflection_strength"].get<double>();
+            return tdlas;
         }
     } // namespace Utils
 } // namespace mqtt_serialization

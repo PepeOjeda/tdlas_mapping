@@ -4,8 +4,8 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
-        - /Status1
+        - /Rays1/Topic1
+        - /AerialMap1
       Splitter Ratio: 0.5
     Tree Height: 720
   - Class: rviz_common/Selection
@@ -33,7 +33,7 @@ Visualization Manager:
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -46,10 +46,10 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Marker
+      Name: Reflector
       Namespaces:
         "": true
       Topic:
@@ -62,7 +62,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: Sensor
       Namespaces:
         arrow: true
       Topic:
@@ -72,6 +72,36 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /sensor_marker
       Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Rays
+      Namespaces:
+        arrow: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /rays_marker
+      Value: true
+    - Alpha: 0.699999988079071
+      Blocks: 3
+      Class: rviz_satellite/AerialMap
+      Draw Behind: true
+      Enabled: true
+      Name: AerialMap
+      Object URI: https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga
+      TF tolerance: 0.10000000149011612
+      Timeout: 3
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /fake_gps
+      Value: true
+      Zoom: 21
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -118,25 +148,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 33.790897369384766
+      Distance: 30.34949493408203
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 7.641162872314453
-        Y: 3.7687387466430664
-        Z: 0.7269783616065979
-      Focal Shape Fixed Size: true
+        X: 8.027823448181152
+        Y: 0.4483373165130615
+        Z: 0.06606168299913406
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.5203975439071655
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.005378131754696369
+      Yaw: 4.5604071617126465
     Saved: ~
 Window Geometry:
   Displays:

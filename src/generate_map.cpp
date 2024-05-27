@@ -2,7 +2,7 @@
 #include <fstream>
 #include <PoseJSON.hpp>
 #include <tdlas_mapping/common.h>
-#include <olfaction_msgs/msg/tdlas.hpp>
+#include <Utils.hpp>
 #include <tf2/LinearMath/Transform.h>
 
 #include <opencv4/opencv2/core.hpp>
@@ -24,15 +24,6 @@ static cv::Mat rays_image;
 using PoseStamped = geometry_msgs::msg::PoseStamped;
 using TDLAS = olfaction_msgs::msg::TDLAS;
 using namespace std::chrono_literals;
-
-static TDLAS jsonToTDLAS(const nlohmann::json& json)
-{
-    TDLAS tdlas;
-    tdlas.average_ppmxm = (double)json["average_ppmxm"].get<int>();
-    tdlas.average_absorption_strength = json["average_absorption_strength"].get<double>();
-    tdlas.average_reflection_strength = json["average_reflection_strength"].get<double>();
-    return tdlas;
-}
 
 MapGenerator::MapGenerator() : Node("MapGenerator")
 {
@@ -127,7 +118,7 @@ void MapGenerator::readFile()
         auto json = nlohmann::json::parse(line);
         tf2::Transform sensor = poseToTransform(mqtt_serialization::pose_from_json(json[m_sensor_name]).pose);
         tf2::Transform reflector = poseToTransform(mqtt_serialization::pose_from_json(json[m_reflector_name]).pose);
-        TDLAS tdlas = jsonToTDLAS(json["reading"]);
+        TDLAS tdlas = mqtt_serialization::Utils::jsonToTDLAS(json["reading"]);
 
         m_measurements[measurementIndex] = tdlas.average_ppmxm;
 

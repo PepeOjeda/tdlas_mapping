@@ -4,6 +4,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <Utils.hpp>
 
 using Marker=visualization_msgs::msg::Marker;
 using MarkerArray=visualization_msgs::msg::MarkerArray;
@@ -13,10 +14,12 @@ class TrajectoryPainter : public rclcpp::Node
 public:
     rclcpp::Publisher<MarkerArray>::SharedPtr sensorPub;
     rclcpp::Publisher<Marker>::SharedPtr reflectorPub;
+    rclcpp::Publisher<Marker>::SharedPtr raysPub;
     
     TrajectoryPainter(): Node("Trajectory")
     {
         reflectorPub = create_publisher<Marker>("/reflector_marker", rclcpp::QoS(1).reliable().transient_local());
+        raysPub = create_publisher<Marker>("/rays_marker", rclcpp::QoS(1).reliable().transient_local());
         sensorPub = create_publisher<MarkerArray>("/sensor_marker", rclcpp::QoS(1).reliable().transient_local());
         declare_parameter<std::string>("filepath");
     }
@@ -35,9 +38,9 @@ public:
             reflectorMarker.scale.y = 0.1;
             reflectorMarker.scale.z = 0.1;
 
-            reflectorMarker.color.r = 1;
-            reflectorMarker.color.g = 0;
-            reflectorMarker.color.b = 0;
+            reflectorMarker.color.r = 0;
+            reflectorMarker.color.g = 1;
+            reflectorMarker.color.b = 1;
             reflectorMarker.color.a = 1;
         }
 
@@ -58,6 +61,16 @@ public:
             arrowMarker.color.b = 0;
         }
 
+        Marker linesMarker;
+        {
+            linesMarker.header.frame_id = "map";
+            linesMarker.header.stamp = now();
+            linesMarker.ns = "arrow";
+            linesMarker.type = Marker::LINE_LIST;
+            linesMarker.action = Marker::ADD;
+            linesMarker.scale.x = 0.2;
+        }
+
         std::string filepath = get_parameter("filepath").as_string();
         std::ifstream file (filepath);
         if(!file.is_open())
@@ -74,23 +87,45 @@ public:
         {
             auto json = nlohmann::json::parse(line);
             geometry_msgs::msg::PoseStamped sensor = mqtt_serialization::pose_from_json(json["sensorTF"]);
+            sensor.pose.position.z = 0;
             geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["reflectorTF"]);
+            reflector.pose.position.z = 0;
+            auto tdlas = mqtt_serialization::Utils::jsonToTDLAS(json["reading"]);
 
             reflectorMarker.points.push_back(reflector.pose.position);
 
-            glm::quat cameraRotation = geoMsgToGLM(sensor.pose.orientation);
-            glm::quat fixedRotation(glm::vec3{0, M_PI/2, 0});
-            glm::quat combinedRotation = glm::cross(cameraRotation, fixedRotation);
-            sensor.pose.orientation = glmToGeoMsg(combinedRotation);
-            arrowMarker.pose = sensor.pose;
-            arrowMarker.id = markerId++;
-            sensorMarker.markers.push_back(arrowMarker);
+            //sensor arrow
+            {
+                glm::quat cameraRotation = geoMsgToGLM(sensor.pose.orientation);
+                glm::quat fixedRotation(glm::vec3{0, M_PI/2, 0});
+                glm::quat combinedRotation = glm::cross(cameraRotation, fixedRotation);
+                sensor.pose.orientation = glmToGeoMsg(combinedRotation);
+                arrowMarker.pose = sensor.pose;
+                arrowMarker.id = markerId++;
+                sensorMarker.markers.push_back(arrowMarker);
+            }
+
+            //ray line
+            {
+                linesMarker.points.push_back(sensor.pose.position);
+                linesMarker.points.push_back(reflector.pose.position);
+                std_msgs::msg::ColorRGBA lineColor;
+                lineColor.r = 1;
+                lineColor.g = 0;
+                lineColor.b = 0;
+                lineColor.a = tdlas.average_ppmxm / 200.0;
+                //color is pushed twice because it will do a gradient from point a to point b
+                linesMarker.colors.push_back(lineColor);
+                linesMarker.colors.push_back(lineColor);
+            }
+
             numLines++;
         }
 
         //RCLCPP_INFO(get_logger(), "Number of lines parsed: %u", numLines);
         reflectorPub->publish(reflectorMarker);
         sensorPub->publish(sensorMarker);
+        raysPub->publish(linesMarker);
     }
 
     glm::quat geoMsgToGLM(const geometry_msgs::msg::Quaternion& q)

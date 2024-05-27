@@ -1,7 +1,6 @@
 #pragma once
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include "Utils.hpp"
-#include "json.hpp"
 
 namespace mqtt_serialization
 {
