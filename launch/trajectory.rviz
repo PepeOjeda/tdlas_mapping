@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Rays1/Topic1
         - /AerialMap1
+        - /Concentration1
       Splitter Ratio: 0.5
     Tree Height: 720
   - Class: rviz_common/Selection
@@ -51,7 +52,7 @@ Visualization Manager:
       Enabled: true
       Name: Reflector
       Namespaces:
-        "": true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -64,7 +65,7 @@ Visualization Manager:
       Enabled: true
       Name: Sensor
       Namespaces:
-        arrow: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -102,6 +103,19 @@ Visualization Manager:
         Value: /fake_gps
       Value: true
       Zoom: 21
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Concentration
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /concentration_markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -148,25 +162,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 38.07040786743164
+      Distance: 30.138568878173828
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 12.333732604980469
-        Y: 1.4979615211486816
-        Z: 0.15127919614315033
+        X: 7.894052505493164
+        Y: 2.5799083709716797
+        Z: 1.0281943082809448
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5203975439071655
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.5604071617126465
+      Yaw: 4.710428714752197
     Saved: ~
 Window Geometry:
   Displays:

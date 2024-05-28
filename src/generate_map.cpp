@@ -15,7 +15,6 @@
 #include <ceres/ceres.h>
 #include <ceres/dynamic_autodiff_cost_function.h>
 
-
 static cv::Mat rays_image;
 
 using PoseStamped = geometry_msgs::msg::PoseStamped;
@@ -30,6 +29,7 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
     m_input_filepath = declare_parameter<std::string>("filepath", "measurement_log");
     m_sensor_name = declare_parameter<std::string>("sensor_name", "sensorTF");
     m_reflector_name = declare_parameter<std::string>("reflector_name", "reflectorTF");
+    m_markerPub = create_publisher<Marker>("/concentration_markers", 1);
 }
 
 void MapGenerator::getEnvironment()
@@ -163,6 +163,9 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         uint columnIndex = index2Dto1D(index);
         m_lengthRayInCell[rowIndex][columnIndex] = length;
 
+        //prior
+        m_concentration[columnIndex] = std::max(m_concentration[columnIndex], (double)ppmxm / rayData.totalLength);
+
 #define DEBUG_POSITIONS 0
 #if DEBUG_POSITIONS
         // DEBUG - Draw only the final positions
@@ -196,8 +199,7 @@ struct RayFunctor
     RayFunctor(int i) : rowIndex(i)
     {}
 
-    template <typename T> 
-    bool operator()(T const* const* x, T* residuals) const
+    template <typename T> bool operator()(T const* const* x, T* residuals) const
     {
         const T* concentrations = *x;
         T predictedReading = DotProduct(lengthInCell[rowIndex], concentrations);
@@ -205,8 +207,7 @@ struct RayFunctor
         return true;
     }
 
-    template <typename T> T 
-    DotProduct(const std::vector<double>& row, const T* concentrations) const
+    template <typename T> T DotProduct(const std::vector<double>& row, const T* concentrations) const
     {
         T sum{0};
         for (int i = 0; i < indices.size(); i++)
@@ -219,15 +220,14 @@ struct LambdaFunctor
 {
     static inline double lambda;
     int size;
-    LambdaFunctor(int _size): size(_size)
+    LambdaFunctor(int _size) : size(_size)
     {}
 
-    template <typename T> 
-    bool operator()(T const* const* x, T* residuals) const
+    template <typename T> bool operator()(T const* const* x, T* residuals) const
     {
         const T* concentrations = *x;
         for (int i = 0; i < size; i++)
-            if(concentrations[i]< T{0})
+            if (concentrations[i] < T{0})
                 return false;
 
         T concentrationsNorm = squaredNorm(concentrations, size);
@@ -235,15 +235,15 @@ struct LambdaFunctor
         return true;
     }
 
-    template <typename T> 
-    T squaredNorm(const T* array, size_t size) const
+    template <typename T> T squaredNorm(const T* array, size_t size) const
     {
         T sum{0};
         for (int i = 0; i < size; i++)
         {
             sum += array[i] * array[i];
-            //sum += ceres::abs(array[i] -T{i}); //test
+            // sum += ceres::abs(array[i] -T{i}); //test
         }
+        //return ceres::sqrt(sum+1e-8);
         return sum;
     }
 };
@@ -257,7 +257,8 @@ public:
     ceres::CallbackReturnType operator()(const ceres::IterationSummary& summary)
     {
         mapGenerator.writeHeatmap();
-        if(rclcpp::ok())
+        mapGenerator.publishMarkers();
+        if (rclcpp::ok())
             return ceres::SOLVER_CONTINUE;
         else
             return ceres::SOLVER_ABORT;
@@ -291,11 +292,11 @@ void MapGenerator::solve()
         cost_function->SetNumResiduals(1);
         problem.AddResidualBlock(cost_function, nullptr, params);
 
-        //for (int j = 0; j < params.size(); j++)
-        //    problem.SetParameterLowerBound(params[j], 0, 0.0);
+        // for (int j = 0; j < params.size(); j++)
+        //     problem.SetParameterLowerBound(params[j], 0, 0.0);
     }
 
-    //separate functor to apply the lambda to the whole map
+    // separate functor to apply the lambda to the whole map
     LambdaFunctor::lambda = m_lambda;
     {
         auto* cost_function = new ceres::DynamicAutoDiffCostFunction<LambdaFunctor, 4>(new LambdaFunctor(m_concentration.size()));
@@ -312,7 +313,7 @@ void MapGenerator::solve()
     }
 
     ceres::Solver::Options options;
-    options.minimizer_type=ceres::LINE_SEARCH;
+    options.minimizer_type = ceres::LINE_SEARCH;
     options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
     options.linear_solver_type = ceres::SPARSE_SCHUR;
     options.use_explicit_schur_complement = true;
@@ -332,8 +333,6 @@ void MapGenerator::solve()
     RCLCPP_INFO(get_logger(), "Done! Took %.2fs", summary.total_time_in_seconds);
     RCLCPP_INFO(get_logger(), "Summary:\n%s", summary.FullReport().c_str());
 }
-
-
 
 void MapGenerator::writeHeatmap()
 {
@@ -379,6 +378,34 @@ void MapGenerator::writeHeatmap()
     RCLCPP_INFO(get_logger(), "MAP WAS GENERATED AT PATH: %s", outputPath.c_str());
 }
 
+void MapGenerator::publishMarkers()
+{
+    Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = now();
+    marker.type = Marker::POINTS;
+    marker.scale.x = marker.scale.y = m_rayMarchResolution;
+
+    float max = *std::max_element(m_concentration.begin(), m_concentration.end());
+    for (int i = 0; i < m_occupancy_map.size(); i++)
+    {
+        for (int j = 0; j < m_occupancy_map[0].size(); j++)
+        {
+            if (m_occupancy_map[i][j])
+            {
+                marker.points.push_back(glm::toPoint(m_mapOrigin + glm::vec2(i, j) * m_rayMarchResolution));
+
+                float ppmxm = m_concentration[i + j * m_occupancy_map.size()];
+                std_msgs::msg::ColorRGBA color = valueToColor(ppmxm, 0, max, valueColorMode::Linear);
+                color.a = 0.5;
+                marker.colors.push_back(color);
+            }
+        }
+    }
+
+    m_markerPub->publish(marker);
+}
+
 int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
@@ -388,6 +415,13 @@ int main(int argc, char** argv)
     node->readFile();
     node->solve();
     node->writeHeatmap();
+
+    rclcpp::Rate rate(2);
+    while(rclcpp::ok())
+    {
+        node->publishMarkers();
+        rate.sleep();
+    }
 
     rclcpp::shutdown();
     return 0;

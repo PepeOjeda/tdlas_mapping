@@ -22,13 +22,34 @@ def generate_launch_description():
             emulate_tty=True,
             #prefix="xterm -e gdb --args",
             parameters=[
-                {"rayMarchResolution": 0.4},
+                {"rayMarchResolution": 0.2},
                 {"lambda": 0.1},
-                {"prior": 100.0},
-                {"filepath": "/home/pepe/colcon_ws/tdlas/1_1.json"},
+                {"prior": 0.0},
+                {"filepath": "tdlas/all.json"},
                 {"sensor_name": "sensorTF"},
                 {"reflector_name": "reflectorTF"},
             ],
             on_exit=Shutdown()
+        ),
+        Node(
+            package='gps2cartesian',
+            executable='fakeGPSpub',
+            name='fakeGPSpub',
+            prefix='xterm -hold -e',
+            parameters=[
+                {'gps_latitude' : 36.7159195233333},
+                {'gps_longitude' : -4.47891364833333},
+                {'gps_altitude' : 0.0},
+                {'gps_frame_id' : 'map'},
+                {'gps_topic_pub' : 'fake_gps'}
+                ],
+            ),
+        
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            name="rviz2",
+            arguments=['-d', os.path.join(my_dir, 'launch', 'trajectory.rviz')],
+            prefix='xterm -hold -e',
         ),
     ])
