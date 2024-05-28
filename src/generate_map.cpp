@@ -399,7 +399,7 @@ void MapGenerator::publishMarkers()
 
                 float ppmxm = m_concentration[i + j * m_occupancy_map.size()];
                 std_msgs::msg::ColorRGBA color = valueToColor(ppmxm, m_markerColorLimits.x, m_markerColorLimits.y, valueColorMode::Linear);
-                color.a = 0.5;
+                color.a = m_markerAlpha;
                 marker.colors.push_back(color);
             }
         }
@@ -418,9 +418,10 @@ void MapGenerator::renderGUI()
 
         AmentImgui::StartFrame();
         ImGui::Begin("Colors");
-        ImGui::SetWindowSize(ImVec2(177,90));
+        ImGui::SetWindowSize(ImVec2(177,100));
         ImGui::DragFloat("Min", &m_markerColorLimits.x, 0.1f, 0.0f, FLT_MAX, "%.1f");
         ImGui::DragFloat("Max", &m_markerColorLimits.y, 0.1f, 0.0f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Alpha", &m_markerAlpha, 0.005f, 0.0f, 1.0f, "%.2f");
         ImGui::End();
 
         AmentImgui::Render();

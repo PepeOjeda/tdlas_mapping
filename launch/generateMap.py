@@ -23,7 +23,7 @@ def generate_launch_description():
             #prefix="xterm -e gdb --args",
             parameters=[
                 {"rayMarchResolution": 0.2},
-                {"lambda": 0.1},
+                {"lambda": 0.001},
                 {"prior": 0.0},
                 {"filepath": "tdlas/all.json"},
                 {"sensor_name": "sensorTF"},

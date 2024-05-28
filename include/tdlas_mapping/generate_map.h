@@ -37,6 +37,7 @@ private:
 
     rclcpp::Publisher<Marker>::SharedPtr m_markerPub;
     glm::vec2 m_markerColorLimits;
+    float m_markerAlpha = 0.5;
     
     void runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, int ppmxm);
 
