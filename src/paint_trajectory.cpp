@@ -1,10 +1,10 @@
 #include <rclcpp/rclcpp.hpp>
-#include <PoseJSON.hpp>
+#include <json/PoseJSON.hpp>
 #include <fstream>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <Utils.hpp>
+#include <json/Utils.hpp>
 
 using Marker=visualization_msgs::msg::Marker;
 using MarkerArray=visualization_msgs::msg::MarkerArray;
@@ -86,11 +86,11 @@ public:
         while(std::getline(file, line))
         {
             auto json = nlohmann::json::parse(line);
-            geometry_msgs::msg::PoseStamped sensor = mqtt_serialization::pose_from_json(json["sensorTF"]);
+            geometry_msgs::msg::PoseStamped sensor = jsonSerialization::pose_from_json(json["sensorTF"]);
             sensor.pose.position.z = 0;
-            geometry_msgs::msg::PoseStamped reflector = mqtt_serialization::pose_from_json(json["reflectorTF"]);
+            geometry_msgs::msg::PoseStamped reflector = jsonSerialization::pose_from_json(json["reflectorTF"]);
             reflector.pose.position.z = 0;
-            auto tdlas = mqtt_serialization::Utils::jsonToTDLAS(json["reading"]);
+            auto tdlas = jsonSerialization::Utils::jsonToTDLAS(json["reading"]);
 
             reflectorMarker.points.push_back(reflector.pose.position);
 

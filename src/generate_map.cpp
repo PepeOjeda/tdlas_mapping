@@ -1,8 +1,8 @@
 #include <tdlas_mapping/generate_map.h>
 #include <fstream>
-#include <PoseJSON.hpp>
+#include <json/PoseJSON.hpp>
 #include <tdlas_mapping/common.h>
-#include <Utils.hpp>
+#include <json/Utils.hpp>
 #include <tf2/LinearMath/Transform.h>
 
 #include <opencv4/opencv2/core.hpp>
@@ -28,11 +28,12 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
     m_rayMarchResolution = declare_parameter<float>("rayMarchResolution", 0.05f);
     m_lambda = declare_parameter<float>("lambda", 0.01);
     m_prior = declare_parameter<double>("prior", 0.0);
+    m_useRayPrior = declare_parameter<bool>("useRayPrior", false);
     m_input_filepath = declare_parameter<std::string>("filepath", "measurement_log");
     m_sensor_name = declare_parameter<std::string>("sensor_name", "sensorTF");
     m_reflector_name = declare_parameter<std::string>("reflector_name", "reflectorTF");
     m_markerPub = create_publisher<Marker>("/concentration_markers", 1);
-    m_markerColorLimits = glm::vec2(0, 100);
+    m_markerColorLimits = glm::vec2(0, 10);
 }
 
 void MapGenerator::getEnvironment()
@@ -53,8 +54,8 @@ void MapGenerator::getEnvironment()
     while (std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform(mqtt_serialization::pose_from_json(json[m_sensor_name]).pose);
-        tf2::Transform reflector = poseToTransform(mqtt_serialization::pose_from_json(json[m_reflector_name]).pose);
+        tf2::Transform sensor = poseToTransform(jsonSerialization::pose_from_json(json[m_sensor_name]).pose);
+        tf2::Transform reflector = poseToTransform(jsonSerialization::pose_from_json(json[m_reflector_name]).pose);
 
         min.x = std::min({(double)min.x, sensor.getOrigin().x(), reflector.getOrigin().x()});
         min.y = std::min({(double)min.y, sensor.getOrigin().y(), reflector.getOrigin().y()});
@@ -64,8 +65,8 @@ void MapGenerator::getEnvironment()
     }
 
     // a little bit of arbitrary padding around the used area
-    max += glm::vec2{m_rayMarchResolution * 4, m_rayMarchResolution * 4};
-    min += glm::vec2{-m_rayMarchResolution * 4, -m_rayMarchResolution * 4};
+    //max += glm::vec2{m_rayMarchResolution * 4, m_rayMarchResolution * 4};
+    //min += glm::vec2{-m_rayMarchResolution * 4, -m_rayMarchResolution * 4};
 
     RCLCPP_INFO(get_logger(), "Environment bounds: (%.2f, %.2f) --- (%.2f, %.2f)", min.x, min.y, max.x, max.y);
     num_cells_x = std::ceil((max.x - min.x) / m_rayMarchResolution);
@@ -100,6 +101,7 @@ void MapGenerator::readFile()
     m_measurements.resize(numberOfMeasurements);
     m_lengthRayInCell.resize(numberOfMeasurements, std::vector<double>(m_num_cells, 0.0));
     m_concentration.resize(m_num_cells, m_prior);
+    m_concentrationPrior.resize(m_num_cells);
 
     // restart the ifstream
     file.clear();
@@ -114,9 +116,9 @@ void MapGenerator::readFile()
     while (std::getline(file, line))
     {
         auto json = nlohmann::json::parse(line);
-        tf2::Transform sensor = poseToTransform(mqtt_serialization::pose_from_json(json[m_sensor_name]).pose);
-        tf2::Transform reflector = poseToTransform(mqtt_serialization::pose_from_json(json[m_reflector_name]).pose);
-        TDLAS tdlas = mqtt_serialization::Utils::jsonToTDLAS(json["reading"]);
+        tf2::Transform sensor = poseToTransform(jsonSerialization::pose_from_json(json[m_sensor_name]).pose);
+        tf2::Transform reflector = poseToTransform(jsonSerialization::pose_from_json(json[m_reflector_name]).pose);
+        TDLAS tdlas = jsonSerialization::Utils::jsonToTDLAS(json["reading"]);
 
         m_measurements[measurementIndex] = tdlas.average_ppmxm;
 
@@ -166,8 +168,8 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         uint columnIndex = index2Dto1D(index);
         m_lengthRayInCell[rowIndex][columnIndex] = length;
 
-        // prior
-        m_concentration[columnIndex] = std::max(m_concentration[columnIndex], (double)ppmxm / rayData.totalLength);
+        if (m_useRayPrior)
+            m_concentration[columnIndex] = m_concentrationPrior[columnIndex].Update( 100 *ppmxm / rayData.totalLength);
 
 #define DEBUG_POSITIONS 0
 #if DEBUG_POSITIONS
@@ -202,7 +204,8 @@ struct RayFunctor
     RayFunctor(int i) : rowIndex(i)
     {}
 
-    template <typename T> bool operator()(T const* const* x, T* residuals) const
+    template <typename T>
+    bool operator()(T const* const* x, T* residuals) const
     {
         const T* concentrations = *x;
         T predictedReading = DotProduct(lengthInCell[rowIndex], concentrations);
@@ -210,7 +213,8 @@ struct RayFunctor
         return true;
     }
 
-    template <typename T> T DotProduct(const std::vector<double>& row, const T* concentrations) const
+    template <typename T>
+    T DotProduct(const std::vector<double>& row, const T* concentrations) const
     {
         T sum{0};
         for (int i = 0; i < indices.size(); i++)
@@ -226,7 +230,8 @@ struct LambdaFunctor
     LambdaFunctor(int _size) : size(_size)
     {}
 
-    template <typename T> bool operator()(T const* const* x, T* residuals) const
+    template <typename T>
+    bool operator()(T const* const* x, T* residuals) const
     {
         const T* concentrations = *x;
         for (int i = 0; i < size; i++)
@@ -238,7 +243,8 @@ struct LambdaFunctor
         return true;
     }
 
-    template <typename T> T squaredNorm(const T* array, size_t size) const
+    template <typename T>
+    T squaredNorm(const T* array, size_t size) const
     {
         T sum{0};
         for (int i = 0; i < size; i++)
@@ -316,14 +322,15 @@ void MapGenerator::solve()
     }
 
     ceres::Solver::Options options;
-    options.minimizer_type = ceres::LINE_SEARCH;
+    options.minimizer_type = ceres::LINE_SEARCH; //for some reason, using TRUST_REGION does not work. The solver reports a huge negative cost_change every iteration and the answer remains untouched
     options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
-    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     options.use_explicit_schur_complement = true;
 
     options.num_threads = 10;
     options.minimizer_progress_to_stdout = true;
     options.logging_type = ceres::PER_MINIMIZER_ITERATION;
+
     options.max_num_iterations = 10000;
     options.function_tolerance = 1e-9;
     options.gradient_tolerance = 1e-12;
@@ -333,9 +340,30 @@ void MapGenerator::solve()
 
     ceres::Solver::Summary summary;
     Solve(options, &problem, &summary);
+    
+    //Attempt to perturb the solution slightly to escape local minima. Not really working at all, stops immediately and returns the noisy input as a valid solution
+    //for(int i = 0; i<3; i++)
+    //{
+    //    RCLCPP_WARN(get_logger(), "ANNEALING ITERATION %d", i);
+    //    double max = *std::max_element(m_concentration.begin(), m_concentration.end());
+    //    addNoiseToSolution(0.05f * max);
+    //    Solve(options, &problem, &summary);
+    //}
+
+
     RCLCPP_INFO(get_logger(), "Done! Took %.2fs", summary.total_time_in_seconds);
     RCLCPP_INFO(get_logger(), "Summary:\n%s", summary.FullReport().c_str());
 }
+
+void MapGenerator::addNoiseToSolution(float stdev)
+{
+    for(int i = 0; i< m_concentration.size(); i++)
+    {
+        m_concentration[i] += RandomFromGaussian(0, stdev);
+        m_concentration[i] = std::max(m_concentration[i], 0.0);
+    }
+}
+
 
 void MapGenerator::writeHeatmap()
 {
@@ -378,7 +406,7 @@ void MapGenerator::writeHeatmap()
     cv::imwrite(outputPath, img_color);
 
     RCLCPP_INFO(get_logger(), "MAX CONCENTRATION VALUE: %.3f ppm", max);
-    RCLCPP_INFO(get_logger(), "MAP WAS GENERATED AT PATH: %s", outputPath.c_str());
+    RCLCPP_DEBUG(get_logger(), "MAP WAS GENERATED AT PATH: %s", outputPath.c_str());
 }
 
 void MapGenerator::publishMarkers()
@@ -418,7 +446,7 @@ void MapGenerator::renderGUI()
 
         AmentImgui::StartFrame();
         ImGui::Begin("Colors");
-        ImGui::SetWindowSize(ImVec2(177,100));
+        ImGui::SetWindowSize(ImVec2(177, 100));
         ImGui::DragFloat("Min", &m_markerColorLimits.x, 0.1f, 0.0f, FLT_MAX, "%.1f");
         ImGui::DragFloat("Max", &m_markerColorLimits.y, 0.1f, 0.0f, FLT_MAX, "%.1f");
         ImGui::DragFloat("Alpha", &m_markerAlpha, 0.005f, 0.0f, 1.0f, "%.2f");
@@ -435,7 +463,7 @@ int main(int argc, char** argv)
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MapGenerator>();
 
-    std::thread renderThread([node](){node->renderGUI();});
+    std::thread renderThread([node]() { node->renderGUI(); });
 
     node->getEnvironment();
     node->readFile();

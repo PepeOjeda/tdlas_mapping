@@ -23,9 +23,10 @@ def generate_launch_description():
             #prefix="xterm -e gdb --args",
             parameters=[
                 {"rayMarchResolution": 0.2},
-                {"lambda": 0.001},
-                {"prior": 0.0},
-                {"filepath": "tdlas/all.json"},
+                {"lambda": 0.1},
+                {"prior": 1.0},
+                {"useRayPrior": True},
+                {"filepath": "tdlas/1_1.json"},
                 {"sensor_name": "sensorTF"},
                 {"reflector_name": "reflectorTF"},
             ],

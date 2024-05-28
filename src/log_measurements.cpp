@@ -5,7 +5,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <fstream>
 #include <tdlas_mapping/common.h>
-#include <PoseJSON.hpp>
+#include <json/PoseJSON.hpp>
 #include <image_marker_msgs/msg/marker_detection.hpp>
 
 using MarkerDetection=image_marker_msgs::msg::MarkerDetection;
@@ -84,9 +84,9 @@ public:
         geometry_msgs::msg::PoseStamped aruco_pose = getPoseFromTF(arucoFrame);
         
         nlohmann::json json_entry;
-        json_entry["sensorTF"] = mqtt_serialization::pose_to_json(sensor_pose);
-        json_entry["reflectorTF"] = mqtt_serialization::pose_to_json(reflector_pose);
-        json_entry["arucoTF"] = mqtt_serialization::pose_to_json(aruco_pose);
+        json_entry["sensorTF"] = jsonSerialization::pose_to_json(sensor_pose);
+        json_entry["reflectorTF"] = jsonSerialization::pose_to_json(reflector_pose);
+        json_entry["arucoTF"] = jsonSerialization::pose_to_json(aruco_pose);
         json_entry["isAiming"] = aimingAtAruco;
         json_entry["reading"] = tdlasToJson(last_tdlas_msg);
         file << json_entry.dump();

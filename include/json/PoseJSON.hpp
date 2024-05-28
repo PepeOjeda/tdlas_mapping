@@ -2,7 +2,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include "Utils.hpp"
 
-namespace mqtt_serialization
+namespace jsonSerialization
 {
     inline nlohmann::json pose_to_json(const geometry_msgs::msg::PoseStamped& pose)
     {

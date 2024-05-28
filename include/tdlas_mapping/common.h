@@ -1,56 +1,26 @@
 #pragma once
 #include <tf2/LinearMath/Vector3.h>
 #include <rclcpp/rclcpp.hpp>
-#include <json.hpp>
-
-
-static constexpr double Deg2Rad = (2*M_PI)/360;
+#include <json/json.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
 
 static float signedAngle(const tf2::Vector3& v1, const tf2::Vector3& v2, const tf2::Vector3& referenceAxis)
 {
-    float sign = (v1.cross(v2).dot(referenceAxis)) >0? 1 : -1;
+    float sign = (v1.cross(v2).dot(referenceAxis)) > 0 ? 1 : -1;
     return v1.angle(v2) * sign;
 }
 
-static float signedDistanceToLine(const tf2::Vector3& lineOrigin, const tf2::Vector3& lineDirection, const tf2::Vector3& p )
+static float signedDistanceToLine(const tf2::Vector3& lineOrigin, const tf2::Vector3& lineDirection, const tf2::Vector3& p)
 {
-    tf2::Vector3 vecToP = p-lineOrigin;
+    tf2::Vector3 vecToP = p - lineOrigin;
     tf2::Vector3 projected = lineOrigin + lineDirection.normalized() * lineDirection.normalized().dot(vecToP);
-    
-    float sign = signedAngle( lineDirection, vecToP, {0,0,1}) >0? 1:-1;
+
+    float sign = signedAngle(lineDirection, vecToP, {0, 0, 1}) > 0 ? 1 : -1;
 
     return tf2::tf2Distance2(p, projected) * sign;
-}
-
-static tf2::Transform parse_status_publisher_msg(const std::string& msg)
-{
-    auto json =  nlohmann::json::parse(msg); 
-    std::string x_y_yaw_string = json["data"]["pose"].get<std::string>();
-        
-    tf2::Transform tf;
-    //parse the string
-    std::array<double, 3> x_y_yaw;
-    std::stringstream s_stream(x_y_yaw_string);
-    int i = 0;
-    
-    s_stream.ignore(2,'[');
-    while(!s_stream.eof())
-    {
-        //for debugging
-        //std::string remaining = (s_stream.str().substr(s_stream.tellg()));
-        
-        s_stream >> x_y_yaw[i];
-        s_stream.ignore(2,' ');
-        
-        if(s_stream.fail())
-            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "ERROR PARSING THE JSON STRING: %s, \n\nPOSE SUBSTRING: %s:", msg.c_str(), x_y_yaw_string.c_str());
-        i++;   
-    }
-
-    tf.setOrigin( {x_y_yaw[0], x_y_yaw[1], 0} );
-    tf.setRotation( tf2::Quaternion({0,0,1}, Deg2Rad * x_y_yaw[2]) );
-    
-    return tf;
 }
 
 static geometry_msgs::msg::Point VecToPoint(const tf2::Vector3& vec)
@@ -59,7 +29,7 @@ static geometry_msgs::msg::Point VecToPoint(const tf2::Vector3& vec)
     p.x = vec.x();
     p.y = vec.y();
     p.z = vec.z();
-    
+
     return p;
 }
 
@@ -70,7 +40,6 @@ static geometry_msgs::msg::Pose transformToPose(const tf2::Transform& transform)
     pose.orientation = tf2::toMsg(transform.getRotation());
     return pose;
 }
-
 
 static tf2::Transform poseToTransform(const geometry_msgs::msg::Pose& pose)
 {
@@ -85,4 +54,107 @@ static tf2::Transform poseToTransform(const geometry_msgs::msg::Pose& pose)
     tf2::fromMsg(pose.orientation, quat);
     transform.setRotation(quat);
     return transform;
+}
+
+class RollingAverage
+{
+public:
+    RollingAverage() : numValues(0), currentAverage(0.0f)
+    {}
+    float Update(float next)
+    {
+        currentAverage = (currentAverage * numValues + next) / (numValues + 1);
+        numValues++;
+        return currentAverage;
+    }
+
+    float Get()
+    {
+        return currentAverage;
+    }
+
+private:
+    uint numValues;
+    float currentAverage;
+};
+
+inline std_msgs::msg::ColorRGBA makeColor(float r, float g, float b, float a)
+{
+    std_msgs::msg::ColorRGBA color;
+    color.r = std::clamp(r, 0.0f, 1.0f);
+    color.g = std::clamp(g, 0.0f, 1.0f);
+    color.b = std::clamp(b, 0.0f, 1.0f);
+    color.a = std::clamp(a, 0.0f, 1.0f);
+    return color;
+}
+
+inline double lerp(double start, double end, double proportion)
+{
+    if (proportion < 0 || std::isnan(proportion))
+        return start;
+
+    return start + (end - start) * std::min(1.0, proportion);
+}
+
+enum valueColorMode
+{
+    Linear,
+    Logarithmic
+};
+inline std_msgs::msg::ColorRGBA valueToColor(double val, double lowLimit, double highLimit, valueColorMode mode)
+{
+    double r, g, b;
+    double range;
+    if (mode == valueColorMode::Logarithmic)
+    {
+        val = std::log10(val);
+        range = (std::log10(highLimit) - std::log10(lowLimit)) / 4;
+        lowLimit = std::log10(lowLimit);
+    }
+    else
+    {
+        range = (highLimit - lowLimit) / 4;
+    }
+
+    if (val < lowLimit + range)
+    {
+        r = 0;
+        g = lerp(0, 1, (val - lowLimit) / (range));
+        b = 1;
+    }
+    else if (val < lowLimit + 2 * range)
+    {
+        r = 0;
+        g = 1;
+        b = lerp(1, 0, (val - (lowLimit + range)) / (range));
+    }
+    else if (val < lowLimit + 3 * range)
+    {
+        r = (val - (lowLimit + 2 * range)) / (range);
+        g = 1;
+        b = 0;
+    }
+    else
+    {
+        r = 1;
+        g = lerp(1, 0, (val - (lowLimit + 3 * range)) / (range));
+        b = 0;
+    }
+    return makeColor(r, g, b, 1);
+}
+
+#include <random>
+float RandomFromGaussian(double mean, double stdev)
+{
+    static thread_local std::minstd_rand0 RNGengine;
+    static thread_local std::normal_distribution<> dist{0, stdev};
+    static thread_local double previousStdev = stdev;
+
+    if (stdev != previousStdev)
+    {
+        dist = std::normal_distribution<>{0, stdev};
+        previousStdev = stdev;
+    }
+
+    return mean + dist(RNGengine);
 }
