@@ -17,6 +17,7 @@ public:
     void getEnvironment();
     void writeHeatmap();
     void publishMarkers();
+    void renderGUI();
 private:
     std::string m_input_filepath;
     std::string m_sensor_name;
@@ -35,6 +36,7 @@ private:
     glm::vec2 m_mapOrigin;
 
     rclcpp::Publisher<Marker>::SharedPtr m_markerPub;
+    glm::vec2 m_markerColorLimits;
     
     void runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, int ppmxm);
 

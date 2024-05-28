@@ -15,6 +15,8 @@
 #include <ceres/ceres.h>
 #include <ceres/dynamic_autodiff_cost_function.h>
 
+#include <ament_imgui/ament_imgui.h>
+
 static cv::Mat rays_image;
 
 using PoseStamped = geometry_msgs::msg::PoseStamped;
@@ -30,6 +32,7 @@ MapGenerator::MapGenerator() : Node("MapGenerator")
     m_sensor_name = declare_parameter<std::string>("sensor_name", "sensorTF");
     m_reflector_name = declare_parameter<std::string>("reflector_name", "reflectorTF");
     m_markerPub = create_publisher<Marker>("/concentration_markers", 1);
+    m_markerColorLimits = glm::vec2(0, 100);
 }
 
 void MapGenerator::getEnvironment()
@@ -163,7 +166,7 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         uint columnIndex = index2Dto1D(index);
         m_lengthRayInCell[rowIndex][columnIndex] = length;
 
-        //prior
+        // prior
         m_concentration[columnIndex] = std::max(m_concentration[columnIndex], (double)ppmxm / rayData.totalLength);
 
 #define DEBUG_POSITIONS 0
@@ -243,7 +246,7 @@ struct LambdaFunctor
             sum += array[i] * array[i];
             // sum += ceres::abs(array[i] -T{i}); //test
         }
-        //return ceres::sqrt(sum+1e-8);
+        // return ceres::sqrt(sum+1e-8);
         return sum;
     }
 };
@@ -386,7 +389,6 @@ void MapGenerator::publishMarkers()
     marker.type = Marker::POINTS;
     marker.scale.x = marker.scale.y = m_rayMarchResolution;
 
-    float max = *std::max_element(m_concentration.begin(), m_concentration.end());
     for (int i = 0; i < m_occupancy_map.size(); i++)
     {
         for (int j = 0; j < m_occupancy_map[0].size(); j++)
@@ -396,7 +398,7 @@ void MapGenerator::publishMarkers()
                 marker.points.push_back(glm::toPoint(m_mapOrigin + glm::vec2(i, j) * m_rayMarchResolution));
 
                 float ppmxm = m_concentration[i + j * m_occupancy_map.size()];
-                std_msgs::msg::ColorRGBA color = valueToColor(ppmxm, 0, max, valueColorMode::Linear);
+                std_msgs::msg::ColorRGBA color = valueToColor(ppmxm, m_markerColorLimits.x, m_markerColorLimits.y, valueColorMode::Linear);
                 color.a = 0.5;
                 marker.colors.push_back(color);
             }
@@ -406,23 +408,46 @@ void MapGenerator::publishMarkers()
     m_markerPub->publish(marker);
 }
 
+void MapGenerator::renderGUI()
+{
+    AmentImgui::Setup(nullptr, "TDLAS optimization", 250, 200);
+
+    rclcpp::Rate rate(30);
+    while (rclcpp::ok())
+    {
+
+        AmentImgui::StartFrame();
+        ImGui::Begin("Colors");
+        ImGui::SetWindowSize(ImVec2(177,90));
+        ImGui::DragFloat("Min", &m_markerColorLimits.x, 0.1f, 0.0f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Max", &m_markerColorLimits.y, 0.1f, 0.0f, FLT_MAX, "%.1f");
+        ImGui::End();
+
+        AmentImgui::Render();
+        rate.sleep();
+    }
+    AmentImgui::Close();
+}
+
 int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MapGenerator>();
+
+    std::thread renderThread([node](){node->renderGUI();});
 
     node->getEnvironment();
     node->readFile();
     node->solve();
     node->writeHeatmap();
 
-    rclcpp::Rate rate(2);
-    while(rclcpp::ok())
+    rclcpp::Rate rate(30);
+    while (rclcpp::ok())
     {
         node->publishMarkers();
-        rate.sleep();
     }
 
+    renderThread.join();
     rclcpp::shutdown();
     return 0;
 }
