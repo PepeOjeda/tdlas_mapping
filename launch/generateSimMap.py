@@ -16,19 +16,24 @@ def generate_launch_description():
 
         Node(
             package='tdlas_mapping',
-            executable='generate_map',
-            name='generate_map',
+            executable='map_simulations',
+            name='map_simulations',
             output='screen',
             emulate_tty=True,
             #prefix="xterm -e gdb --args",
             parameters=[
                 {"rayMarchResolution": 0.2},
-                {"lambda": 1.0},
-                {"prior": 10.0},
+                {"lambda": 0.01},
+                {"prior": 100.0},
                 {"useRayPrior": False},
-                {"filepath": "tdlas/1_1.json"},
-                {"sensor_name": "sensorTF"},
-                {"reflector_name": "reflectorTF"},
+
+                {"mapSizeX": 20.0},
+                {"mapSizeY": 20.0},
+                {"sourcePosX": 5.0},
+                {"sourcePosY": 5.0},
+
+                {"sensorNoise": 0.0},
+                {"numMeasurementsPerPosition": 1},
             ],
             on_exit=Shutdown()
         ),

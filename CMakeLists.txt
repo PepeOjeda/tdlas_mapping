@@ -30,7 +30,7 @@ endforeach()
 find_package(Ceres)
 
 
-include_directories(include)
+include_directories(include include/DDA/third_party/glm)
 
 
 #Log Measurements
@@ -43,7 +43,7 @@ ${AMENT_DEPS}
 find_package(OpenCV REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(fmt REQUIRED)
-add_executable(generate_map src/generate_map.cpp)
+add_executable(generate_map src/generate_map.cpp src/MapGenerator.cpp)
 target_include_directories(generate_map PRIVATE include/DDA/include)
 target_link_libraries(generate_map 
     ${OpenCV_LIBS} 
@@ -54,20 +54,34 @@ ament_target_dependencies(generate_map
 ${AMENT_DEPS}
 ) 
 
+#Fake map from simulations
+find_package(OpenCV REQUIRED)
+find_package(OpenMP REQUIRED)
+find_package(fmt REQUIRED)
+add_executable(map_simulations src/mapFromSimulations.cpp src/MapGenerator.cpp)
+target_include_directories(map_simulations PRIVATE include/DDA/include)
+target_link_libraries(map_simulations 
+    ${OpenCV_LIBS} 
+    fmt 
+    OpenMP::OpenMP_CXX
+    Ceres::ceres)
+ament_target_dependencies(map_simulations
+${AMENT_DEPS}
+) 
+
 #Trajectory painter
 add_executable(paint_trajectory src/paint_trajectory.cpp)
-target_include_directories(paint_trajectory PRIVATE include/DDA/third_party/glm)
 ament_target_dependencies(paint_trajectory
 ${AMENT_DEPS}
 ) 
 
 
 install(
-  TARGETS log_measurements generate_map paint_trajectory
+  TARGETS log_measurements generate_map paint_trajectory map_simulations
   DESTINATION lib/${PROJECT_NAME}
 )
 install(
-  DIRECTORY launch maps data
+  DIRECTORY launch maps
   DESTINATION share/${PROJECT_NAME}
 )
 ament_package()

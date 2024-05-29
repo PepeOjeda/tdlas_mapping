@@ -56,6 +56,23 @@ static tf2::Transform poseToTransform(const geometry_msgs::msg::Pose& pose)
     return transform;
 }
 
+#include <glm/vec2.hpp>
+namespace glm
+{
+    static glm::vec2 fromTF(const tf2::Vector3& v)
+    {
+        return glm::vec2(v.x(), v.y());
+    }
+
+    static geometry_msgs::msg::Point toPoint (const glm::vec2& vec)
+    {
+        geometry_msgs::msg::Point p;
+        p.x = vec.x;
+        p.y = vec.y;
+        return p;
+    }
+}
+
 class RollingAverage
 {
 public:
@@ -71,6 +88,11 @@ public:
     float Get()
     {
         return currentAverage;
+    }
+
+    operator float()
+    {
+        return Get();
     }
 
 private:
@@ -144,7 +166,7 @@ inline std_msgs::msg::ColorRGBA valueToColor(double val, double lowLimit, double
 }
 
 #include <random>
-float RandomFromGaussian(double mean, double stdev)
+inline float RandomFromGaussian(double mean, double stdev)
 {
     static thread_local std::minstd_rand0 RNGengine;
     static thread_local std::normal_distribution<> dist{0, stdev};
