@@ -133,8 +133,9 @@ private:
 
     void createMeasurements()
     {
-        // std::vector<TDLASMeasurement> measurements = verticalAndHorizontalSweep();
-        std::vector<TDLASMeasurement> measurements = twoCorners();
+        std::vector<TDLASMeasurement> measurements = verticalAndHorizontalSweep();
+        //std::vector<TDLASMeasurement> measurements = twoCorners();
+        //std::vector<TDLASMeasurement> measurements = threeCorners();
         mapGenerator->SetMeasurements(measurements);
     }
 
@@ -260,6 +261,59 @@ private:
             {
                 TDLASMeasurement m;
                 m.origin = glm::vec2(0.9 * m_mapSize.x, 0.1 * m_mapSize.y);
+                m.reflectorPosition = m.origin + glm::rotate(direction, (float) M_PI/2 * i/numSamples);
+                m.direction = glm::normalize(m.reflectorPosition - m.origin);
+                m.ppmxm = simulateMeasurement(m.origin, m.direction, m.reflectorPosition);
+                measurements.push_back(m);
+            }
+        }
+        return measurements;
+    }
+
+    std::vector<TDLASMeasurement> threeCorners()
+    {
+        std::vector<TDLASMeasurement> measurements;
+
+        constexpr float numSamples = 100;
+        glm::vec2 direction (20,0);
+
+        // first
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < m_numMeasurementsPerPosition; j++)
+            {
+                TDLASMeasurement m;
+                m.origin = glm::vec2(0.1 * m_mapSize.x, 0.1 * m_mapSize.y);
+                m.reflectorPosition = m.origin + glm::rotate(direction, (float) M_PI/2 * i/numSamples);
+                m.direction = glm::normalize(m.reflectorPosition - m.origin);
+                m.ppmxm = simulateMeasurement(m.origin, m.direction, m.reflectorPosition);
+                measurements.push_back(m);
+            }
+        }
+
+        // second
+        direction ={0,20};
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < m_numMeasurementsPerPosition; j++)
+            {
+                TDLASMeasurement m;
+                m.origin = glm::vec2(0.9 * m_mapSize.x, 0.1 * m_mapSize.y);
+                m.reflectorPosition = m.origin + glm::rotate(direction, (float) M_PI/2 * i/numSamples);
+                m.direction = glm::normalize(m.reflectorPosition - m.origin);
+                m.ppmxm = simulateMeasurement(m.origin, m.direction, m.reflectorPosition);
+                measurements.push_back(m);
+            }
+        }
+
+        // third
+        direction ={0, -20};
+        for (int i = 0; i < numSamples; i++)
+        {
+            for (int j = 0; j < m_numMeasurementsPerPosition; j++)
+            {
+                TDLASMeasurement m;
+                m.origin = glm::vec2(0.1 * m_mapSize.x, 0.9 * m_mapSize.y);
                 m.reflectorPosition = m.origin + glm::rotate(direction, (float) M_PI/2 * i/numSamples);
                 m.direction = glm::normalize(m.reflectorPosition - m.origin);
                 m.ppmxm = simulateMeasurement(m.origin, m.direction, m.reflectorPosition);
