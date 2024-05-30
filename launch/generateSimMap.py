@@ -23,14 +23,14 @@ def generate_launch_description():
             #prefix="xterm -e gdb --args",
             parameters=[
                 {"rayMarchResolution": 0.2},
-                {"lambda": 0.1},
-                {"prior": 10.0},
-                {"useRayPrior": False},
+                {"lambda": 0.5},
+                {"prior": 1.9},
+                {"useRayPrior": True},
 
                 {"mapSizeX": 20.0},
                 {"mapSizeY": 20.0},
-                {"sourcePosX": 5.0},
-                {"sourcePosY": 5.0},
+                {"sourcePosX": 6.0},
+                {"sourcePosY": 15.0},
 
                 {"sensorNoise": 0.0},
                 {"numMeasurementsPerPosition": 1},

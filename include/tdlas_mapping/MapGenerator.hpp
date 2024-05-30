@@ -71,6 +71,7 @@ struct RayFunctor
         const T* concentrations = *x;
         T predictedReading = DotProduct(lengthInCell[rowIndex], concentrations);
         residuals[0] = ceres::abs(predictedReading - measurements[rowIndex]);
+        //residuals[0] *= residuals[0] ;
         return true;
     }
 
@@ -113,7 +114,7 @@ struct LambdaFunctor
         {
             T error = array[i] - backgroundC;
             sum += error * error;
-            // sum += ceres::abs(array[i] -T{i}); //test
+            //sum += ceres::sqrt(ceres::abs(error) + 1e-8);
         }
         // return ceres::sqrt(sum+1e-8);
         return sum;

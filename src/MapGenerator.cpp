@@ -46,7 +46,7 @@ void MapGenerator::SetMeasurements(const std::vector<TDLASMeasurement>& measurem
 
 void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, float ppmxm)
 {
-    constexpr float reflectorRadius = 0.26;
+    constexpr float reflectorRadius = 0.1;
 
     static auto identity = [](const bool& b) { return b; };
 
