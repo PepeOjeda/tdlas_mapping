@@ -1,10 +1,18 @@
 #include <ament_imgui/ament_imgui.h>
+#include <tdlas_mapping/Logging.hpp>
 #include <tdlas_mapping/MapGenerator.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/rotate_vector.hpp>
 
+#include <filesystem>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
 using visualization_msgs::msg::Marker;
+
+static constexpr float degToRad = M_PI / 180.0;
 
 class Simulation;
 
@@ -42,6 +50,7 @@ public:
 
         m_sensorNoise = declare_parameter<double>("sensorNoise", 10);
         m_numMeasurementsPerPosition = declare_parameter<int>("numMeasurementsPerPosition", 1);
+        declare_parameter<std::string>("GTConcentrationImage", "");
     }
 
     void run()
@@ -50,7 +59,8 @@ public:
         createMeasurements();
 
         std::thread renderThread([this]() { renderGUI(); });
-        solve();
+        if (declare_parameter<bool>("solve", true))
+            solve();
 
         rclcpp::Rate rate(30);
         while (rclcpp::ok())
@@ -137,8 +147,9 @@ private:
         // std::vector<TDLASMeasurement> measurements = twoCorners();
         // std::vector<TDLASMeasurement> measurements = threeCorners();
         // std::vector<TDLASMeasurement> measurements = fourCorners();
-        //std::vector<TDLASMeasurement> measurements = axialSinglePoint();
-        //std::vector<TDLASMeasurement> measurements = axialPointPlane();
+        // std::vector<TDLASMeasurement> measurements = axialSinglePoint();
+        // std::vector<TDLASMeasurement> measurements = axialPointPlane();
+        //std::vector<TDLASMeasurement> measurements = axialPointArc();
         std::vector<TDLASMeasurement> measurements = axialPlane();
         mapGenerator->SetMeasurements(measurements);
     }
@@ -185,18 +196,31 @@ private:
         double sum = 0;
         for (const auto& [index, length] : rayData.lengthInCell)
         {
-            sum += concentrationAt(index) * length;
+            sum += concentrationAt(glm::vec2(index) * m_rayMarchResolution) * length;
         }
 
         return std::max(0.0, sum + RandomFromGaussian(0, m_sensorNoise));
     }
 
-    double concentrationAt(glm::ivec2 indices)
+    double concentrationAt(glm::vec2 coords)
     {
-        if (indices == glm::ivec2(m_sourcePos / m_rayMarchResolution))
-            return 700;
+        glm::ivec2 indices = coords / m_rayMarchResolution;
+        static const std::string path = get_parameter_or<std::string>("GTConcentrationImage", "");
+        if (std::filesystem::exists(path))
+        {
+            static cv::Mat GTConcentration = cv::imread(path, cv::IMREAD_GRAYSCALE);
+            indices.x = std::clamp(indices.x, 0, GTConcentration.size().width);
+            indices.y = std::clamp(indices.y, 0, GTConcentration.size().height);
+            uint8_t v = GTConcentration.at<uint8_t>(indices.x, indices.y);
+            return v;
+        }
         else
-            return 1.9;
+        {
+            if (indices == glm::ivec2(m_sourcePos / m_rayMarchResolution))
+                return 700;
+            else
+                return 1.9;
+        }
     }
 
     //----------------------------------------------------------
@@ -423,11 +447,11 @@ private:
     {
         std::vector<TDLASMeasurement> measurements;
 
-        constexpr float planeHalfExtents = 3;
+        constexpr float planeHalfExtents = 7;
         constexpr float planeStepSize = 0.2;
 
-        constexpr float numSamples = 300;
-        glm::vec2 direction(9, 0);
+        constexpr float numSamples = 8;
+        glm::vec2 direction(7, 0);
 
         for (int i = 0; i < numSamples; i++)
         {
@@ -451,14 +475,45 @@ private:
         return measurements;
     }
 
+    std::vector<TDLASMeasurement> axialPointArc()
+    {
+        std::vector<TDLASMeasurement> measurements;
+
+        constexpr float arcHalfLength = 90.0f * degToRad;
+        constexpr float arcStep = 0.5 * degToRad;
+
+        constexpr float numSamples = 8;
+        glm::vec2 direction(7, 0);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            TDLASMeasurement m;
+            glm::vec2 rotatedDir = glm::rotate(direction, (float)M_PI * 2 * i / numSamples);
+            m.origin = m_mapSize * 0.5f + rotatedDir;
+
+            for (float offsetAmount = -arcHalfLength; offsetAmount < arcHalfLength; offsetAmount += arcStep)
+            {
+                m.reflectorPosition = m.origin + glm::rotate(-2.0f * rotatedDir, offsetAmount);
+                m.direction = glm::normalize(m.reflectorPosition - m.origin);
+
+                for (int j = 0; j < m_numMeasurementsPerPosition; j++)
+                {
+                    m.ppmxm = simulateMeasurement(m.origin, m.direction, m.reflectorPosition);
+                    measurements.push_back(m);
+                }
+            }
+        }
+        return measurements;
+    }
+
     std::vector<TDLASMeasurement> axialPlane()
     {
         std::vector<TDLASMeasurement> measurements;
 
-        constexpr float planeHalfExtents = 3;
-        constexpr float planeStepSize = 0.2;
+        constexpr float planeHalfExtents = 5;
+        constexpr float planeStepSize = 0.1;
 
-        constexpr float numSamples = 300;
+        constexpr float numSamples = 150;
         glm::vec2 direction(9, 0);
 
         for (int i = 0; i < numSamples; i++)

@@ -22,11 +22,14 @@ def generate_launch_description():
             emulate_tty=True,
             #prefix="xterm -e gdb --args",
             parameters=[
+                {"solve": False},
+
                 {"rayMarchResolution": 0.2},
                 {"lambda": 0.5},
                 {"prior": 1.9},
                 {"useRayPrior": True},
 
+                {"GTConcentrationImage": "/home/pepe/HDD/colcon_ws/GTImage.png"},
                 {"mapSizeX": 20.0},
                 {"mapSizeY": 20.0},
                 {"sourcePosX": 6.0},

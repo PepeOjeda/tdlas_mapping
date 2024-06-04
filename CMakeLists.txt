@@ -35,9 +35,7 @@ include_directories(include include/DDA/third_party/glm)
 
 #Log Measurements
 add_executable(log_measurements src/log_measurements.cpp)
-ament_target_dependencies(log_measurements
-${AMENT_DEPS}
-) 
+ament_target_dependencies(log_measurements ${AMENT_DEPS}) 
 
 #Generate map
 find_package(OpenCV REQUIRED)
@@ -50,9 +48,7 @@ target_link_libraries(generate_map
     fmt 
     OpenMP::OpenMP_CXX
     Ceres::ceres)
-ament_target_dependencies(generate_map
-${AMENT_DEPS}
-) 
+ament_target_dependencies(generate_map ${AMENT_DEPS}) 
 
 #Fake map from simulations
 find_package(OpenCV REQUIRED)
@@ -65,15 +61,11 @@ target_link_libraries(map_simulations
     fmt 
     OpenMP::OpenMP_CXX
     Ceres::ceres)
-ament_target_dependencies(map_simulations
-${AMENT_DEPS}
-) 
+ament_target_dependencies(map_simulations ${AMENT_DEPS}) 
 
 #Trajectory painter
 add_executable(paint_trajectory src/paint_trajectory.cpp)
-ament_target_dependencies(paint_trajectory
-${AMENT_DEPS}
-) 
+ament_target_dependencies(paint_trajectory ${AMENT_DEPS}) 
 
 
 install(

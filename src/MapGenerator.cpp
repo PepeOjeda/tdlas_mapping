@@ -46,7 +46,7 @@ void MapGenerator::SetMeasurements(const std::vector<TDLASMeasurement>& measurem
 
 void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, const glm::vec2& reflectorPosition, uint rowIndex, float ppmxm)
 {
-    constexpr float reflectorRadius = 0.1;
+    constexpr float reflectorRadius = 0.26;
 
     static auto identity = [](const bool& b) { return b; };
 
@@ -63,7 +63,8 @@ void MapGenerator::runDDA(const glm::vec2& origin, const glm::vec2& direction, c
         m_lengthRayInCell[rowIndex][columnIndex] = length;
 
         if (m_options.useRayPrior)
-            m_concentration[columnIndex] = m_concentrationPrior[columnIndex].Update(ppmxm / rayData.totalLength);
+            //m_concentration[columnIndex] = m_concentrationPrior[columnIndex].Update(ppmxm * length);
+            m_concentration[columnIndex] += (ppmxm * length);
 
 #define DEBUG_POSITIONS 0
 #if DEBUG_POSITIONS
